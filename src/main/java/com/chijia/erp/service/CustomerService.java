@@ -1,5 +1,6 @@
 package com.chijia.erp.service;
 
+import java.io.InputStream;
 import java.util.List;
 
 import com.chijia.erp.model.dto.CustomerDTO;
@@ -20,4 +21,7 @@ public interface CustomerService {
 	
 	// 5. 切換啟用/停用狀態 (五金行實務上避免刪除客戶導致舊帳目崩潰，皆用狀態控制)
 	void toggleStatus(Long id);
+	
+	//6. 💡 新增這行：解析並匯入客戶 Excel 資料
+    String importCustomersFromExcel(InputStream inputStream) throws Exception;
 }

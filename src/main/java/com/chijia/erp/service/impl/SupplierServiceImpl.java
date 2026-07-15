@@ -1,18 +1,24 @@
 package com.chijia.erp.service.impl;
 
+import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
+import org.apache.poi.ss.usermodel.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.chijia.erp.mapper.SupplierMapper;
 import com.chijia.erp.model.dto.SupplierDTO;
 import com.chijia.erp.model.entity.Supplier;
 import com.chijia.erp.repository.SupplierRepository;
 import com.chijia.erp.service.SupplierService;
+import com.chijia.erp.util.ExcelHelper;
 
-import jakarta.transaction.Transactional;
+
 
 @Service
 public class SupplierServiceImpl implements SupplierService{
@@ -84,6 +90,72 @@ public class SupplierServiceImpl implements SupplierService{
 		supplier.setStatus(!supplier.isStatus());
 		supplierRepository.save(supplier);
 	}
-	
+
+	@Override
+	@Transactional(rollbackFor = Exception.class)// 💡 確保若匯入出錯，整批 Rollback，不污染資料庫
+	public String importSuppliersFromExcel(InputStream inputStream) throws Exception{
+		// 1. 使用 POI 的 WorkbookFactory 自動辨識是 .xls 還是 .xlsx
+		Workbook workbook = WorkbookFactory.create(inputStream);
+		
+		// 2. 獲取廠商資料專屬的 Sheet 名稱 "bsupp"
+		Sheet sheet = workbook.getSheet("bsupp");
+		if(sheet == null) {
+			// 防呆：如果找不到該分頁，嘗試拿第一個 Sheet
+			sheet = workbook.getSheetAt(0);
+		}
+		
+		List<Supplier> supplierList = new ArrayList<>();
+		int importCount = 0;
+		
+		// 3. 遍歷每一列 (老牌系統前三行是標題，第四行 Index = 3 開始是數據)
+		for(int i= 3 ;i <= sheet.getLastRowNum() ;i ++) {
+			Row row = sheet.getRow(i);
+			if(row ==null) {
+				continue;
+			}
+			// 讀取第 0 欄：廠商編號，若為空代表這行是空行，結束或跳過
+			String supplierCode = ExcelHelper.getCellValueAsString(row.getCell(0));
+			if(supplierCode.isEmpty() || "*".equals(supplierCode)) {
+				continue;
+			}
+			
+			// 4. 對齊 Excel 欄位並封裝成 Supplier Entity 物件
+			Supplier supplier = new Supplier();
+			
+			supplier.setSupplierCode(supplierCode);
+			supplier.setShortName(ExcelHelper.getCellValueAsString(row.getCell(1)));
+			supplier.setPhone(ExcelHelper.getCellValueAsString(row.getCell(4)));
+			supplier.setFullName(ExcelHelper.getCellValueAsString(row.getCell(14)));
+			supplier.setTaxId(ExcelHelper.getCellValueAsString(row.getCell(21)));
+			supplier.setCompanyAddress(ExcelHelper.getCellValueAsString(row.getCell(25)));
+			supplier.setStatus(true);
+			
+			// 5. 實務設計：防重複匯入（利用廠商編號判斷）
+            // 如果資料庫已經有這個廠商，就更新它；沒有則新增。
+			Optional<Supplier> existingSupplierOpt = supplierRepository.findBySupplierCode(supplierCode);
+			if(existingSupplierOpt.isPresent()) {
+				Supplier existingSupplier = existingSupplierOpt.get();
+				existingSupplier.setShortName(supplier.getShortName());
+				existingSupplier.setPhone(supplier.getPhone());
+				existingSupplier.setFullName(supplier.getFullName());
+				existingSupplier.setTaxId(supplier.getTaxId());
+				existingSupplier.setCompanyAddress(supplier.getCompanyAddress());
+				supplierList.add(existingSupplier);
+			}else {
+				// 💡 如果不存在，直接新增
+				supplierList.add(supplier);
+			}
+			
+			importCount++;	
+		}
+		
+		// 6. 批次儲存到資料庫
+        if (!supplierList.isEmpty()) {
+            supplierRepository.saveAll(supplierList);
+        }
+			
+        workbook.close();
+		return "成功匯入/更新 " + importCount + " 筆廠商資料！";
+	}
 
 }
