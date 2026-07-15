@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.chijia.erp.api.ApiResponse;
 import com.chijia.erp.model.dto.SupplierDTO;
 import com.chijia.erp.service.SupplierService;
 
@@ -28,36 +29,36 @@ public class SupplierController {
 	
 	// 1. 查詢所有廠商：GET /api/v1/suppliers
 	@GetMapping
-	public ResponseEntity<List<SupplierDTO>> getAllSuppliers(){
+	public ResponseEntity<ApiResponse<List<SupplierDTO>>> getAllSuppliers(){
 		List<SupplierDTO> suppliers = supplierService.getAllSuppliers();
-		return ResponseEntity.ok(suppliers);
+		return ResponseEntity.ok(ApiResponse.success(suppliers));
 	}
 	// 2. 透過 ID 查詢單一廠商：GET /api/v1/suppliers/{id}
 	@GetMapping("/{id}")
-	public ResponseEntity<SupplierDTO> getSupplierById(@PathVariable Long id){
+	public ResponseEntity<ApiResponse<SupplierDTO>> getSupplierById(@PathVariable Long id){
 		SupplierDTO supplier = supplierService.getSupplierById(id);
-		return ResponseEntity.ok(supplier);
+		return ResponseEntity.ok(ApiResponse.success("廠商用id查詢成功", supplier));
 	}
 	
 	// 3. 新增廠商：POST /api/v1/suppliers
 	@PostMapping
-	public ResponseEntity<SupplierDTO> creatSupplier(@RequestBody SupplierDTO supplierDTO){
+	public ResponseEntity<ApiResponse<SupplierDTO>> creatSupplier(@RequestBody SupplierDTO supplierDTO){
 		SupplierDTO createdSupplier = supplierService.createSupplier(supplierDTO);
 		// 回傳 201 Created 狀態碼
-		return new ResponseEntity<>(createdSupplier,HttpStatus.CREATED);
+		return new ResponseEntity<>(ApiResponse.success("廠商新增成功", createdSupplier),HttpStatus.CREATED);
 	}
 	
 	// 4. 修改廠商：PUT /api/v1/suppliers/{id}
 	@PutMapping("/{id}")
-	public ResponseEntity<SupplierDTO> updatSupplier(@PathVariable Long id, @RequestBody SupplierDTO supplierDTO){
+	public ResponseEntity<ApiResponse<SupplierDTO>> updatSupplier(@PathVariable Long id, @RequestBody SupplierDTO supplierDTO){
 		SupplierDTO updateSupplier = supplierService.updateSupplier(id, supplierDTO);
-		return ResponseEntity.ok(updateSupplier);
+		return ResponseEntity.ok(ApiResponse.success("廠商修改成功", updateSupplier));
 	}
 	
 	// 5. 切換啟用狀態：PATCH /api/v1/suppliers/{id}/toggle
 	@PatchMapping("/{id}/toggle")
-	public ResponseEntity<Void> toggleStatus(@PathVariable Long id){
+	public ResponseEntity<ApiResponse<Void>> toggleStatus(@PathVariable Long id){
 		supplierService.toggleStatus(id);
-		return ResponseEntity.noContent().build();
+		return ResponseEntity.ok(ApiResponse.success("廠商狀態切換成功", null));
 	}
 }
