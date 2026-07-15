@@ -61,8 +61,21 @@
 			<artifactId>spring-boot-starter-test</artifactId> <!-- 修正：改為標準的 starter-test -->
 			<scope>test</scope>
 		</dependency>
+		
+		<!-- Apache POI - 用於解析舊版 .xls 格式 -->
+			<dependency>
+			    <groupId>org.apache.poi</groupId>
+			    <artifactId>poi</artifactId>
+			    <version>5.2.5</version>
+			</dependency>
+			
+			<!-- Apache POI OOXML - 用於解析新版 .xlsx 格式 -->
+			<dependency>
+			    <groupId>org.apache.poi</groupId>
+			    <artifactId>poi-ooxml</artifactId>
+			    <version>5.2.5</version>
+			</dependency>
 	</dependencies>
-
 	<build>
 		<plugins>
 			<!-- Spring Boot 打包與執行外掛 -->

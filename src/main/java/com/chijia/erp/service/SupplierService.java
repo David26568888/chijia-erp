@@ -1,5 +1,6 @@
 package com.chijia.erp.service;
 
+import java.io.InputStream;
 import java.util.List;
 
 import com.chijia.erp.model.dto.SupplierDTO;
@@ -20,5 +21,12 @@ public interface SupplierService {
     
     // 5. 切換啟用/停用狀態 (五金行實務上很少直接刪除廠商，多用狀態控制以免舊帳目壞掉)
     void toggleStatus(Long id);
+    
+    //6. 解析並大量匯入廠商 Excel 資料
+    /**
+    * @param inputStream 上傳檔案的輸入流
+    * @return 匯入結果訊息
+    */
+    String importSuppliersFromExcel(InputStream intputStream) throws Exception;
 
 }
