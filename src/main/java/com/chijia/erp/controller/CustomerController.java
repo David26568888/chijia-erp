@@ -16,6 +16,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
+
 import com.chijia.erp.api.ApiResponse;
 import com.chijia.erp.model.dto.CustomerDTO;
 import com.chijia.erp.service.CustomerService;
@@ -63,4 +66,17 @@ public class CustomerController {
 		customerService.toggleStatus(id);
 		return ResponseEntity.ok(ApiResponse.success("客戶狀態切換成功",null));// 回傳 204 No Content
 	}
+	
+	// 6. 批次匯入客戶 Excel：POST /api/v1/customers/import
+		@PostMapping("/import")
+		public ResponseEntity<ApiResponse<String>> importCustomers(@RequestParam("file") MultipartFile file) {
+			try {
+				String result = customerService.importCustomersFromExcel(file.getInputStream());
+				return ResponseEntity.ok(ApiResponse.success("客戶匯入成功", result));
+			} catch (Exception e) {
+				e.printStackTrace();
+				return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+						.body(ApiResponse.error(500, "客戶匯入失敗: " + e.getMessage()));
+			}
+		}
 }

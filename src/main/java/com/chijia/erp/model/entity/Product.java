@@ -42,11 +42,12 @@ public class Product {
     @Column(name = "cost_price", precision = 12, scale = 2)
     private BigDecimal costPrice = BigDecimal.ZERO; // 進價
 
-    @Column(name = "stock_quantity", precision = 12, scale = 2)
-    private BigDecimal stockQuantity = BigDecimal.ZERO; // 庫存數量
+ // 💡 一般零售改為 Integer，比較與加減更簡單直覺
+    @Column(name = "stock_quantity", nullable = false)
+    private Integer stockQuantity = 0;// 庫存數量
 
-    @Column(name = "safety_stock", precision = 12, scale = 2)
-    private BigDecimal safetyStock = BigDecimal.ZERO; // 安全存量
+    @Column(name = "safety_stock", nullable = false)
+    private Integer safetyStock = 0; // 安全存量
 
     @Column(name = "remark", columnDefinition = "TEXT")
     private String remark; // 備註

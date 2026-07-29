@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.web.multipart.MultipartFile;
+
 import com.chijia.erp.api.ApiResponse;
 import com.chijia.erp.model.dto.ProductDTO;
 import com.chijia.erp.service.ProductService;
@@ -91,5 +93,18 @@ public class ProductController {
 	    ProductDTO product = productService.getProductByProductCode(productCode);
 	    return ResponseEntity.ok(ApiResponse.success("商品用商品編號查詢成功",product));
 	}
+	
+	// 9. 批次匯入產品 Excel：POST /api/v1/products/import
+		@PostMapping("/import")
+		public ResponseEntity<ApiResponse<String>> importProducts(@RequestParam("file") MultipartFile file) {
+			try {
+				String result = productService.importProductsFromExcel(file.getInputStream());
+				return ResponseEntity.ok(ApiResponse.success("產品匯入成功", result));
+			} catch (Exception e) {
+				e.printStackTrace();
+				return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+						.body(ApiResponse.error(500, "產品匯入失敗: " + e.getMessage()));
+			}
+		}
 	
 }

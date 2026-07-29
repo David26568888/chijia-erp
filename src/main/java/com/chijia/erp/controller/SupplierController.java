@@ -14,6 +14,9 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import org.springframework.web.multipart.MultipartFile;
 
 import com.chijia.erp.api.ApiResponse;
 import com.chijia.erp.model.dto.SupplierDTO;
@@ -61,4 +64,18 @@ public class SupplierController {
 		supplierService.toggleStatus(id);
 		return ResponseEntity.ok(ApiResponse.success("廠商狀態切換成功", null));
 	}
+	
+	// 6.批次匯入廠商 Excel：POST /api/v1/suppliers/import
+		@PostMapping("/import")
+		public ResponseEntity<ApiResponse<String>> importSuppliers(@RequestParam("file") MultipartFile file) {
+			try {
+				// 呼叫 Service 的匯入方法
+				String result = supplierService.importSuppliersFromExcel(file.getInputStream());
+				return ResponseEntity.ok(ApiResponse.success("匯入成功", result));
+			} catch (Exception e) {
+				e.printStackTrace(); // 在主控台印出詳細錯誤以便排查
+				return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+						.body(ApiResponse.error(500, "匯入失敗: " + e.getMessage()));
+			}
+		}
 }
