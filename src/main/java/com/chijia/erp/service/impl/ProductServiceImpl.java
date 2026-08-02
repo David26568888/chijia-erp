@@ -152,8 +152,16 @@ public class ProductServiceImpl implements ProductService {
             double salePriceVal = ExcelHelper.getCellValueAsDouble(row.getCell(6), 0.0);
             double costPriceVal = ExcelHelper.getCellValueAsDouble(row.getCell(8), 0.0);
             
+            // 💡 補上：讀取安全存量 (第 13 欄) 與 庫存總數量 (第 25 欄)
+            int safetyStockVal = (int) ExcelHelper.getCellValueAsDouble(row.getCell(13), 0.0);
+            int stockQtyVal = (int) ExcelHelper.getCellValueAsDouble(row.getCell(25), 0.0);
+            
             product.setSalePrice(BigDecimal.valueOf(salePriceVal)); // 售價 (第 6 欄)
             product.setCostPrice(BigDecimal.valueOf(costPriceVal)); // 進價 (第 8 欄)
+            
+            //設定新產品的庫存與安全存量
+            product.setSafetyStock(safetyStockVal);
+            product.setStockQuantity(stockQtyVal);
             
             product.setStatus(true); // 預設啟用 (上架)
 
@@ -167,6 +175,11 @@ public class ProductServiceImpl implements ProductService {
                 
                 existingProduct.setSalePrice(product.getSalePrice());
                 existingProduct.setCostPrice(product.getCostPrice());
+                
+                // 💡 更新既有商品的庫存與安全存量
+                existingProduct.setSafetyStock(product.getSafetyStock());
+                existingProduct.setStockQuantity(product.getStockQuantity());
+                
                 productList.add(existingProduct);
             } else {
                 productList.add(product);

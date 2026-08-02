@@ -20,6 +20,7 @@ public class ProductMapper {
 		dto.setUnit(entity.getUnit());
 		dto.setSalePrice(entity.getSalePrice());
 		dto.setStockQuantity(entity.getStockQuantity());
+		dto.setSafetyStock(entity.getSafetyStock());
 		dto.setStatus(entity.isStatus());
 		
 		return dto;
@@ -37,6 +38,7 @@ public class ProductMapper {
 		entity.setUnit(dto.getUnit());
 		entity.setSalePrice(dto.getSalePrice());
 		entity.setStockQuantity(dto.getStockQuantity());
+		entity.setSafetyStock(dto.getSafetyStock());
 		entity.setStatus(dto.isStatus());
 		
 		// 注意：新增商品時，進價預設需在 Service 層另外透過專用權限表單處理，或在此設為預設值
