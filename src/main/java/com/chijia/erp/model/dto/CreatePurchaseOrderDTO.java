@@ -1,5 +1,6 @@
 package com.chijia.erp.model.dto;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import jakarta.validation.constraints.NotEmpty;
@@ -25,10 +26,10 @@ public class CreatePurchaseOrderDTO {
 		private Long productId;
 		
 		@NotNull(message = "進貨數量不能為空")
-		private Integer quantity;
+        private BigDecimal quantity; // 💡 已修改為 BigDecimal (支援 1.5 尺等小數進貨)
 		
-		// 💡 進貨單價 (選填)：若採購有手動輸入實際批發價就以此為主；若未填，Service 會自動抓取商品的預設進價 (costPrice)
-		private Integer unitPrice;
+		// 進貨單價 (選填)：若未填，Service 會自動抓取商品的預設成本價 (costPrice)
+        private BigDecimal unitPrice;
 		
 	}
 	

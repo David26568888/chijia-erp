@@ -14,8 +14,8 @@ import lombok.Setter;
 
 @NoArgsConstructor
 @AllArgsConstructor
-@Getter
 @Setter
+@Getter
 @Entity
 @Table(name = "product")
 public class Product {
@@ -36,18 +36,20 @@ public class Product {
     @Column(name = "unit", length = 20)
     private String unit; // 單位 (例如: 式、支、個)
 
+    // 💡 售價 (改為 BigDecimal)
     @Column(name = "sale_price", precision = 12, scale = 2)
-    private BigDecimal salePrice = BigDecimal.ZERO; // 售價
+    private BigDecimal salePrice = BigDecimal.ZERO; 
 
+    // 💡 進價/成本 (改為 BigDecimal)
     @Column(name = "cost_price", precision = 12, scale = 2)
-    private BigDecimal costPrice = BigDecimal.ZERO; // 進價
+    private BigDecimal costPrice = BigDecimal.ZERO;
 
- // 💡 一般零售改為 Integer，比較與加減更簡單直覺
+    // 💡 一般零售改為 Integer，比較與加減更簡單直覺
     @Column(name = "stock_quantity", nullable = false)
-    private Integer stockQuantity = 0;// 庫存數量
+    private BigDecimal stockQuantity = BigDecimal.ZERO; // 預設庫存 0.00 (支援小數點後兩位)
 
     @Column(name = "safety_stock", nullable = false)
-    private Integer safetyStock = 0; // 安全存量
+    private BigDecimal safetyStock = BigDecimal.ZERO;  // 安全存量 0.00
 
     @Column(name = "remark", columnDefinition = "TEXT")
     private String remark; // 備註

@@ -14,7 +14,7 @@ public interface ProductService {
 	ProductDTO getProductById(Long id);
 	
 	//3.新增產品
-	ProductDTO creatProduct(ProductDTO productDTO);
+	ProductDTO createProduct(ProductDTO productDTO);
 	
 	//4.修改產品
 	ProductDTO updateProduct(Long id, ProductDTO productDTO);

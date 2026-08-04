@@ -49,7 +49,7 @@ public class ProductServiceImpl implements ProductService {
 
 	@Override
 	@Transactional
-	public ProductDTO creatProduct(ProductDTO productDTO) {
+	public ProductDTO createProduct(ProductDTO productDTO) {
 		// 商業邏輯檢查：產品編號不能重複
 		if(productRepository.findByProductCode(productDTO.getProductCode()).isPresent()) {
 			throw new RuntimeException("產品編號 [" + productDTO.getProductCode() + "] 已存在，無法新增！");
@@ -153,15 +153,15 @@ public class ProductServiceImpl implements ProductService {
             double costPriceVal = ExcelHelper.getCellValueAsDouble(row.getCell(8), 0.0);
             
             // 💡 補上：讀取安全存量 (第 13 欄) 與 庫存總數量 (第 25 欄)
-            int safetyStockVal = (int) ExcelHelper.getCellValueAsDouble(row.getCell(13), 0.0);
-            int stockQtyVal = (int) ExcelHelper.getCellValueAsDouble(row.getCell(25), 0.0);
+            double safetyStockVal = ExcelHelper.getCellValueAsDouble(row.getCell(13), 0.0);
+            double stockQtyVal = ExcelHelper.getCellValueAsDouble(row.getCell(25), 0.0);
             
             product.setSalePrice(BigDecimal.valueOf(salePriceVal)); // 售價 (第 6 欄)
             product.setCostPrice(BigDecimal.valueOf(costPriceVal)); // 進價 (第 8 欄)
             
             //設定新產品的庫存與安全存量
-            product.setSafetyStock(safetyStockVal);
-            product.setStockQuantity(stockQtyVal);
+            product.setSafetyStock(BigDecimal.valueOf(safetyStockVal));
+            product.setStockQuantity(BigDecimal.valueOf(stockQtyVal));
             
             product.setStatus(true); // 預設啟用 (上架)
 

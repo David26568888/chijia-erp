@@ -16,6 +16,8 @@ import com.chijia.erp.model.dto.CreateSaleOrderDTO;
 import com.chijia.erp.model.dto.SaleOrderDTO;
 import com.chijia.erp.service.SaleOrderService;
 
+import jakarta.validation.Valid;
+
 @RestController
 @RequestMapping("/api/v1/sale-orders")
 @CrossOrigin(origins = "*")
@@ -26,7 +28,7 @@ public class SaleOrderController {
 	
 	// 1. 新增銷貨單 (建立訂單並扣庫存)
 	@PostMapping
-	public ResponseEntity<ApiResponse<SaleOrderDTO>> createSaleOrder(@RequestBody CreateSaleOrderDTO createDTO){
+	public ResponseEntity<ApiResponse<SaleOrderDTO>> createSaleOrder(@Valid@RequestBody CreateSaleOrderDTO createDTO){
 		SaleOrderDTO createdOrder = saleOrderService.createSaleOrder(createDTO);
 		return new ResponseEntity<>(ApiResponse.success("銷貨單建立成功，庫存已同步扣減！", createdOrder), HttpStatus.CREATED);
 	}

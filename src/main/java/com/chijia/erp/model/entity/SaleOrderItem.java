@@ -33,12 +33,15 @@ public class SaleOrderItem {
 	@Column(name = "product_name")
 	private String productName; // 備份商品名稱 (避免商品改名後歷史數據跑掉)
 	
-	@Column(nullable = false)
-	private Integer quantity;// 銷售數量
+	// 💡銷貨數量 (改為 BigDecimal，支援 1.5 尺、0.8 公斤等銷貨)
+    @Column(name = "quantity", nullable = false, precision = 12, scale = 2)
+    private BigDecimal quantity = BigDecimal.ZERO;
 	
-	@Column(name = "unit_price" , nullable = false)
-	private BigDecimal unitPrice; // 銷售單價
+    // 💡銷售單價 (改為 BigDecimal)
+    @Column(name = "unit_price", nullable = false, precision = 12, scale = 2)
+    private BigDecimal unitPrice = BigDecimal.ZERO;
 
-	@Column(nullable = false)
-	private BigDecimal subtotal; // 小計金額 (quantity * unitPrice)
+    // 💡小計金額 (改為 BigDecimal)
+    @Column(name = "subtotal", nullable = false, precision = 12, scale = 2)
+    private BigDecimal subtotal = BigDecimal.ZERO;
 }

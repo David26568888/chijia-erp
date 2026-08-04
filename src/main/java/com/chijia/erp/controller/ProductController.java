@@ -46,8 +46,8 @@ public class ProductController {
 	
 	// 3. 新增產品：POST /api/v1/products
 	@PostMapping
-	public ResponseEntity<ApiResponse<ProductDTO>> creatProduct(@RequestBody ProductDTO productDTO){
-		ProductDTO createdProduct = productService.creatProduct(productDTO);
+	public ResponseEntity<ApiResponse<ProductDTO>> createProduct(@RequestBody ProductDTO productDTO){
+		ProductDTO createdProduct = productService.createProduct(productDTO);
 		// 💡 HTTP 狀態碼回 201 Created，帶上專屬提示字眼
 		return new ResponseEntity<>(ApiResponse.success("商品新增成功", createdProduct)
 					,HttpStatus.CREATED

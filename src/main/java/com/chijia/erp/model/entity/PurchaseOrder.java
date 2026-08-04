@@ -1,5 +1,6 @@
 package com.chijia.erp.model.entity;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -11,12 +12,13 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import lombok.Data;
 
 @Data
 @Entity
-@Table(name = "puchase_order")
+@Table(name = "purchase_order")
 public class PurchaseOrder {
 
 	@Id
@@ -30,7 +32,7 @@ public class PurchaseOrder {
 	private Long supplierId;// 廠商ID
 	
 	@Column(name ="totalAmount",nullable = false)
-	private Integer totalAmount;// 進貨總金額
+	private BigDecimal totalAmount;// 進貨總金額
 	
 	@Column(name = "purchase_date" ,nullable=false)
 	private LocalDateTime purchaseDate;// 進貨時間
@@ -42,11 +44,18 @@ public class PurchaseOrder {
 	@OneToMany(mappedBy = "purchaseOrder",cascade = CascadeType.ALL, orphanRemoval = true)
 	private List<PurchaseOrderItem> items = new ArrayList<>();
 	
-	private void addItem(PurchaseOrderItem item){
+	public void addItem(PurchaseOrderItem item){
 		items.add(item);
 		item.setPurchaseOrder(this);
 	}
 	
+	@PrePersist
+	/*
+	 * purchaseDate 欄位設有 nullable = false，
+	 * 資料庫會直接拋出 PropertyValueException: 
+	 * not-null property references a null 
+	 * or transient value 錯誤而崩潰！
+	 * */
 	public void onCreate() {
 		if(this.purchaseDate == null) {
 			this.purchaseDate = LocalDateTime.now();

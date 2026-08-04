@@ -12,7 +12,7 @@ public class ProductDTO {
     private String unit;          // 單位
     private BigDecimal salePrice; // 售價
     // 實務設計：為了防止利潤外洩，我們在常規的 DTO 中不對前端暴露 costPrice (進價)
-    private Integer stockQuantity; // 👈 必須補上
-    private Integer safetyStock;   // 👈 必須補上
+    private BigDecimal stockQuantity; // 👈 必須補上
+    private BigDecimal safetyStock;   // 👈 必須補上
     private boolean status;       // 狀態
 }

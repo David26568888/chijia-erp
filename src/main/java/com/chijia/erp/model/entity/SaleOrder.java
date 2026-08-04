@@ -25,17 +25,17 @@ public class SaleOrder {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
 	
-	@Column(name = "order_no", nullable = false, unique = true, length = 30)
-	private String orderNo;// 銷貨單號 (例如: SO-20260729-001)
+	@Column(name = "sale_no", nullable = false, unique = true, length = 30)
+	private String saleNo;// 銷貨單號 (例如: SO-20260729-001)
 	
-	@Column(name = "customer_id",nullable = false)
+	@Column(name = "customer_id")// 允許散客結帳 (可為 null)
 	private Long customerId;// 客戶ID
 	
 	@Column(name = "total_amount", nullable = false)
 	private BigDecimal totalAmount;// 銷貨總金額
 	
 	@Column(name = "order_date", nullable = false)
-	private LocalDateTime orderDate;// 銷貨時間
+	private LocalDateTime saleDate;// 銷貨時間
 	
 	private String remark;// 銷貨備註
 	
@@ -51,8 +51,8 @@ public class SaleOrder {
 	
 	@PrePersist
 	public void onCreate() {
-		if(this.orderDate == null) {
-			this.orderDate = LocalDateTime.now();
+		if(this.saleDate == null) {
+			this.saleDate = LocalDateTime.now();
 		}
 	}
 }

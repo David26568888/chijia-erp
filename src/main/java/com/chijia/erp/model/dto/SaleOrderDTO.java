@@ -10,10 +10,10 @@ import lombok.Data;
 @Data
 public class SaleOrderDTO {
 	private Long id;
-	private String orderNo;
+	private String saleNo;
 	private Long customerId;
 	private BigDecimal totalAmount;
-	private LocalDateTime orderDate;
+	private LocalDateTime saleDate;
 	private String remark;
 	private List<ItemDTO> items;
 	
@@ -22,7 +22,7 @@ public class SaleOrderDTO {
 		private Long id;
 		private Long productId;
 		private String productName;
-		private Integer quantity;
+		private BigDecimal quantity;
 		private BigDecimal unitPrice;
 		private BigDecimal subtotal;
 		

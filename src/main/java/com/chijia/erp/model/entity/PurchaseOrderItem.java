@@ -1,6 +1,6 @@
 package com.chijia.erp.model.entity;
 
-import org.hibernate.annotations.ManyToAny;
+import java.math.BigDecimal;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -34,11 +34,11 @@ public class PurchaseOrderItem {
 	private String productName;// 備份商品名稱 (避免商品未來改名影響歷史進貨紀錄)
 	
 	@Column(nullable = false)
-	private Integer quantity;// 進貨數量
+	private BigDecimal quantity = BigDecimal.ZERO; // 進貨數量 (支援小數位，如 1.5 尺)
 	
-	@Column(name = "unit_price", nullable = false)
-	private Integer unitPrice;// 進貨單價 (進價/成本)
+	@Column(name = "unit_price", nullable = false, precision = 12, scale = 2)
+    private BigDecimal unitPrice = BigDecimal.ZERO;
 	
-	@Column(nullable = false)
-	private Integer subtotal;// 小計金額 (quantity * unitPrice)
+	@Column(name = "subtotal", nullable = false, precision = 12, scale = 2)
+    private BigDecimal subtotal = BigDecimal.ZERO;
 }
