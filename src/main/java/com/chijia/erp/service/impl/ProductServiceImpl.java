@@ -4,9 +4,10 @@ import java.io.InputStream;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -14,185 +15,204 @@ import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import com.chijia.erp.mapper.ProductMapper;
 import com.chijia.erp.model.dto.ProductDTO;
 import com.chijia.erp.model.entity.Product;
 import com.chijia.erp.repository.ProductRepository;
 import com.chijia.erp.service.ProductService;
-import com.chijia.erp.util.ExcelHelper;
 
 @Service
 public class ProductServiceImpl implements ProductService {
 
+    @Autowired
+    private ProductRepository productRepository;
 
-	@Autowired
-	private ProductRepository productRepository;
-	
-	@Autowired
-	private ProductMapper productMapper;
+    @Autowired
+    private ProductMapper productMapper; // 手動 Mapper
 
-	@Override
-	public List<ProductDTO> getAllProducts() {
-		
-		return productRepository.findAll().stream()
-				.map(productMapper::toDTO)
-				.collect(Collectors.toList());
-	}
+    // 1. 查詢所有產品
+    @Override
+    public List<ProductDTO> getAllProducts() {
+        return productRepository.findAll().stream()
+                .map(productMapper::toDTO)
+                .collect(Collectors.toList());
+    }
 
-	@Override
-	public ProductDTO getProductById(Long id) {
-		Product product = productRepository.findById(id)
-				.orElseThrow(()->new RuntimeException("找不到該商品，ID: " + id));
-		
-		return productMapper.toDTO(product);
-	}
+    // 2. 透過 ID 查詢單一產品
+    @Override
+    public ProductDTO getProductById(Long id) {
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("找不到產品，ID: " + id));
+        return productMapper.toDTO(product);
+    }
 
-	@Override
-	@Transactional
-	public ProductDTO createProduct(ProductDTO productDTO) {
-		// 商業邏輯檢查：產品編號不能重複
-		if(productRepository.findByProductCode(productDTO.getProductCode()).isPresent()) {
-			throw new RuntimeException("產品編號 [" + productDTO.getProductCode() + "] 已存在，無法新增！");
-		}
-		
-		Product product = productMapper.toEntity(productDTO);
-		product.setStatus(true);
-		
-		Product savedProduct = productRepository.save(product);
-		
-		return productMapper.toDTO(savedProduct);
-	}
+    // 3. 新增產品 (包含三軌成本防呆自動預設)
+    @Override
+    @Transactional
+    public ProductDTO createProduct(ProductDTO productDTO) {
+        if (productDTO.getProductCode() != null && productRepository.existsByProductCode(productDTO.getProductCode())) {
+            throw new RuntimeException("產品編號已存在: " + productDTO.getProductCode());
+        }
 
-	@Override
-	@Transactional
-	public ProductDTO updateProduct(Long id, ProductDTO productDTO) {
-		Product existingProduct = productRepository.findById(id)
-				.orElseThrow(()-> new RuntimeException("找不到該商品，無法更新！ID: " + id));
-		
-		// 覆蓋產品新欄位
-		existingProduct.setProductName(productDTO.getProductName());
+        Product product = productMapper.toEntity(productDTO);
+
+        // 💡 三軌成本防呆：建檔時若只填預設成本 (costPrice)，自動為最後進價與平均成本填補初始預設值
+        if (product.getCostPrice() != null) {
+            if (product.getLastCostPrice() == null) {
+                product.setLastCostPrice(product.getCostPrice());
+            }
+            if (product.getAvgCostPrice() == null) {
+                product.setAvgCostPrice(product.getCostPrice());
+            }
+        }
+
+        Product savedProduct = productRepository.save(product);
+        return productMapper.toDTO(savedProduct);
+    }
+
+    // 4. 修改產品 (完整同步三軌成本)
+    @Override
+    @Transactional
+    public ProductDTO updateProduct(Long id, ProductDTO productDTO) {
+        Product existingProduct = productRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("找不到該產品，無法更新！ID: " + id));
+
+        existingProduct.setProductName(productDTO.getProductName());
         existingProduct.setBarcode(productDTO.getBarcode());
         existingProduct.setUnit(productDTO.getUnit());
         existingProduct.setSalePrice(productDTO.getSalePrice());
-        existingProduct.setStockQuantity(productDTO.getStockQuantity());
-        
-        Product updateProduct = productRepository.save(existingProduct);
-        
-		return productMapper.toDTO(updateProduct);
-	}
 
-	@Override
-	@Transactional
-	public void toggleStatus(Long id) {
-		Product product = productRepository.findById(id)
-				.orElseThrow(() -> new RuntimeException("找不到該商品，無法切換狀態！ID: " + id));
-		
-		product.setStatus(!product.isStatus());
-		productRepository.save(product);
-	}
+        // 💡 更新三軌成本
+        existingProduct.setCostPrice(productDTO.getCostPrice());
+        existingProduct.setLastCostPrice(productDTO.getLastCostPrice());
+        existingProduct.setAvgCostPrice(productDTO.getAvgCostPrice());
 
-	@Override
-	public List<ProductDTO> searchProductByName(String name) {
-		// 調用我們之前在 ProductRepository 定義的模糊查詢方法
-		
-		return productRepository.findByProductNameContaining(name).stream()
-				.map(productMapper::toDTO)
-				.collect(Collectors.toList());
-	}
-
-	@Override
-	public ProductDTO getProductByBarcode(String barcode) {
-	    // 呼叫你在 Repository 寫的 findByBarcode
-	    Product product = productRepository.findByBarcode(barcode)
-	            .orElseThrow(() -> new RuntimeException("找不到該條碼的商品，條碼: " + barcode));
-	    return productMapper.toDTO(product); // 轉換成 DTO 回傳
-	}
-
-	@Override
-	public ProductDTO getProductByProductCode(String productCode) {
-	    // 呼叫你在 Repository 寫的 findByProductCode
-	    Product product = productRepository.findByProductCode(productCode)
-	            .orElseThrow(() -> new RuntimeException("找不到該產品編號的商品，編號: " + productCode));
-	    return productMapper.toDTO(product); // 轉換成 DTO 回傳
-}
-
-	@Override
-    @Transactional(rollbackFor = Exception.class)
-    public String importProductsFromExcel(InputStream inputStream) throws Exception {
-        Workbook workbook = WorkbookFactory.create(inputStream);
-        
-        // 讀取產品資料分頁 "bitem"
-        Sheet sheet = workbook.getSheet("bitem");
-        if (sheet == null) {
-            sheet = workbook.getSheetAt(0);
+        if (productDTO.getStockQuantity() != null) {
+            existingProduct.setStockQuantity(productDTO.getStockQuantity());
         }
-
-        List<Product> productList = new ArrayList<>();
-        int importCount = 0;
-
-        for (int i = 3; i <= sheet.getLastRowNum(); i++) {
-            Row row = sheet.getRow(i);
-            if (row == null) {
-                continue;
-            }
-
-            // 讀取產品編號，若為空或星號 "*" 則跳過
-            String productCode = ExcelHelper.getCellValueAsString(row.getCell(0));
-            if (productCode.isEmpty() || "*".equals(productCode)) {
-                continue;
-            }
-
-            Product product = new Product();
-            product.setProductCode(productCode); // 產品編號 (第 0 欄)
-            product.setProductName(ExcelHelper.getCellValueAsString(row.getCell(1))); // 品名規格 (第 1 欄)
-            product.setBarcode(ExcelHelper.getCellValueAsString(row.getCell(2))); // 條碼編號 (第 2 欄)
-            product.setUnit(ExcelHelper.getCellValueAsString(row.getCell(3))); // 單位 (第 3 欄)
-            
-            // 安全讀取數值
-            double salePriceVal = ExcelHelper.getCellValueAsDouble(row.getCell(6), 0.0);
-            double costPriceVal = ExcelHelper.getCellValueAsDouble(row.getCell(8), 0.0);
-            
-            // 💡 補上：讀取安全存量 (第 13 欄) 與 庫存總數量 (第 25 欄)
-            double safetyStockVal = ExcelHelper.getCellValueAsDouble(row.getCell(13), 0.0);
-            double stockQtyVal = ExcelHelper.getCellValueAsDouble(row.getCell(25), 0.0);
-            
-            product.setSalePrice(BigDecimal.valueOf(salePriceVal)); // 售價 (第 6 欄)
-            product.setCostPrice(BigDecimal.valueOf(costPriceVal)); // 進價 (第 8 欄)
-            
-            //設定新產品的庫存與安全存量
-            product.setSafetyStock(BigDecimal.valueOf(safetyStockVal));
-            product.setStockQuantity(BigDecimal.valueOf(stockQtyVal));
-            
-            product.setStatus(true); // 預設啟用 (上架)
-
-            // 防重複匯入：利用產品編號檢查
-            Optional<Product> existingProductOpt = productRepository.findByProductCode(productCode);
-            if (existingProductOpt.isPresent()) {
-                Product existingProduct = existingProductOpt.get();
-                existingProduct.setProductName(product.getProductName());
-                existingProduct.setBarcode(product.getBarcode());
-                existingProduct.setUnit(product.getUnit());
-                
-                existingProduct.setSalePrice(product.getSalePrice());
-                existingProduct.setCostPrice(product.getCostPrice());
-                
-                // 💡 更新既有商品的庫存與安全存量
-                existingProduct.setSafetyStock(product.getSafetyStock());
-                existingProduct.setStockQuantity(product.getStockQuantity());
-                
-                productList.add(existingProduct);
-            } else {
-                productList.add(product);
-            }
-
-            importCount++;
+        if (productDTO.getSafetyStock() != null) {
+            existingProduct.setSafetyStock(productDTO.getSafetyStock());
         }
+        existingProduct.setStatus(productDTO.isStatus());
 
-        if (!productList.isEmpty()) {
-            productRepository.saveAll(productList);
-        }
-
-        workbook.close();
-        return "成功匯入/更新 " + importCount + " 筆產品資料！";
+        Product updatedProduct = productRepository.save(existingProduct);
+        return productMapper.toDTO(updatedProduct);
     }
-	}
+
+    // 5. 修改產品啟用/停用狀態
+    @Override
+    @Transactional
+    public void toggleStatus(Long id) {
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("找不到產品，ID: " + id));
+        product.setStatus(!product.isStatus());
+        productRepository.save(product);
+    }
+
+    // 6. 五金行必備：依據品名規格模糊搜尋產品 (與介面 searchProductByName 完全對齊)
+    @Override
+    public List<ProductDTO> searchProductByName(String name) {
+        return productRepository.findByProductNameContainingIgnoreCase(name).stream()
+                .map(productMapper::toDTO)
+                .collect(Collectors.toList());
+    }
+
+    // 7. 依據條碼（Barcode）查詢單一產品 (櫃檯掃描槍用)
+    @Override
+    public ProductDTO getProductByBarcode(String barcode) {
+        Product product = productRepository.findByBarcode(barcode)
+                .orElseThrow(() -> new RuntimeException("找不到對應條碼的商品: " + barcode));
+        return productMapper.toDTO(product);
+    }
+
+    // 8. 依據產品編號（ProductCode）查詢單一產品
+    @Override
+    public ProductDTO getProductByProductCode(String productCode) {
+        Product product = productRepository.findByProductCode(productCode)
+                .orElseThrow(() -> new RuntimeException("找不到對應產品編號的商品: " + productCode));
+        return productMapper.toDTO(product);
+    }
+
+    // 9. 解析並匯入商品 Excel 資料 (使用 Apache POI)
+    @Override
+    @Transactional
+    public String importProductsFromExcel(InputStream inputStream) throws Exception {
+        int successCount = 0;
+        int skipCount = 0;
+
+        try (Workbook workbook = WorkbookFactory.create(inputStream)) {
+            Sheet sheet = workbook.getSheetAt(0); // 讀取第一個工作表
+
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) { // 從第 2 列開始 (第 1 列為標題)
+                Row row = sheet.getRow(i);
+                if (row == null) continue;
+
+                String productCode = getCellValueAsString(row.getCell(0));
+                String productName = getCellValueAsString(row.getCell(1));
+
+                if (productCode == null || productCode.trim().isEmpty() || productName == null || productName.trim().isEmpty()) {
+                    continue; // 必填欄位空白則跳過
+                }
+
+                // 若產品編號已存在則跳過，避免重複匯入
+                if (productRepository.existsByProductCode(productCode)) {
+                    skipCount++;
+                    continue;
+                }
+
+                Product product = new Product();
+                product.setProductCode(productCode);
+                product.setProductName(productName);
+                product.setBarcode(getCellValueAsString(row.getCell(2)));
+                product.setUnit(getCellValueAsString(row.getCell(3)));
+                
+                // 讀取價格與庫存
+                BigDecimal costPrice = getCellValueAsBigDecimal(row.getCell(4));
+                BigDecimal salePrice = getCellValueAsBigDecimal(row.getCell(5));
+                BigDecimal stockQty = getCellValueAsBigDecimal(row.getCell(6));
+                BigDecimal safetyStock = getCellValueAsBigDecimal(row.getCell(7));
+
+                product.setCostPrice(costPrice != null ? costPrice : BigDecimal.ZERO);
+                product.setLastCostPrice(costPrice != null ? costPrice : BigDecimal.ZERO);
+                product.setAvgCostPrice(costPrice != null ? costPrice : BigDecimal.ZERO);
+                
+                product.setSalePrice(salePrice != null ? salePrice : BigDecimal.ZERO);
+                product.setStockQuantity(stockQty != null ? stockQty : BigDecimal.ZERO);
+                product.setSafetyStock(safetyStock != null ? safetyStock : BigDecimal.ZERO);
+                product.setStatus(true);
+
+                productRepository.save(product);
+                successCount++;
+            }
+        }
+
+        return String.format("Excel 匯入完成！成功匯入 %d 筆，跳過（重複或無效） %d 筆。", successCount, skipCount);
+    }
+
+    // 🛠️ Excel 儲存格字串輔助轉譯工具
+    private String getCellValueAsString(Cell cell) {
+        if (cell == null) return "";
+        if (cell.getCellType() == CellType.STRING) {
+            return cell.getStringCellValue().trim();
+        } else if (cell.getCellType() == CellType.NUMERIC) {
+            return String.valueOf((long) cell.getNumericCellValue());
+        }
+        return "";
+    }
+
+    // 🛠️ Excel 儲存格數值輔助轉譯工具
+    private BigDecimal getCellValueAsBigDecimal(Cell cell) {
+        if (cell == null) return BigDecimal.ZERO;
+        if (cell.getCellType() == CellType.NUMERIC) {
+            return BigDecimal.valueOf(cell.getNumericCellValue());
+        } else if (cell.getCellType() == CellType.STRING) {
+            try {
+                return new BigDecimal(cell.getStringCellValue().trim());
+            } catch (Exception e) {
+                return BigDecimal.ZERO;
+            }
+        }
+        return BigDecimal.ZERO;
+    }
+}

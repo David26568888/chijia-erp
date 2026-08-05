@@ -8,41 +8,63 @@ import com.chijia.erp.model.entity.Product;
 @Component
 public class ProductMapper {
 
-	// 將資料庫實體 (Entity) 轉換為前端需要的 (DTO)
-	public ProductDTO toDTO(Product entity) {
-		if(entity==null) return null;
-		
-		ProductDTO dto = new ProductDTO();
-		dto.setId(entity.getId());
-		dto.setProductCode(entity.getProductCode());
-		dto.setProductName(entity.getProductName());
-		dto.setBarcode(entity.getBarcode());
-		dto.setUnit(entity.getUnit());
-		dto.setSalePrice(entity.getSalePrice());
-		dto.setStockQuantity(entity.getStockQuantity());
-		dto.setSafetyStock(entity.getSafetyStock());
-		dto.setStatus(entity.isStatus());
-		
-		return dto;
-	}
-	
-	// 將前端傳過來的 (DTO) 轉換為資料庫儲存用的 (Entity)
-	public Product toEntity(ProductDTO dto) {
-		if(dto==null) return null;
-		
-		Product entity = new Product();
-		entity.setId(dto.getId());
-		entity.setProductCode(dto.getProductCode());
-		entity.setProductName(dto.getProductName());
-		entity.setBarcode(dto.getBarcode());
-		entity.setUnit(dto.getUnit());
-		entity.setSalePrice(dto.getSalePrice());
-		entity.setStockQuantity(dto.getStockQuantity());
-		entity.setSafetyStock(dto.getSafetyStock());
-		entity.setStatus(dto.isStatus());
-		
-		// 注意：新增商品時，進價預設需在 Service 層另外透過專用權限表單處理，或在此設為預設值
-		return entity;
-	}
-	
+    /**
+     * Entity 轉 DTO
+     */
+    public ProductDTO toDTO(Product entity) {
+        if (entity == null) {
+            return null;
+        }
+
+        ProductDTO dto = new ProductDTO();
+        dto.setId(entity.getId());
+        dto.setProductCode(entity.getProductCode());
+        dto.setProductName(entity.getProductName());
+        dto.setBarcode(entity.getBarcode());
+        dto.setUnit(entity.getUnit());
+        dto.setSalePrice(entity.getSalePrice());
+
+        // 💡 三軌成本手動對應
+        dto.setCostPrice(entity.getCostPrice());         // 1. 預設 / 基準成本
+        dto.setLastCostPrice(entity.getLastCostPrice()); // 2. 最後進價
+        dto.setAvgCostPrice(entity.getAvgCostPrice());   // 3. 移動加權平均成本
+
+        dto.setStockQuantity(entity.getStockQuantity());
+        dto.setSafetyStock(entity.getSafetyStock());
+        dto.setStatus(entity.isStatus());
+
+        return dto;
+    }
+
+    /**
+     * DTO 轉 Entity
+     */
+    public Product toEntity(ProductDTO dto) {
+        if (dto == null) {
+            return null;
+        }
+
+        Product product = new Product();
+        product.setId(dto.getId());
+        product.setProductCode(dto.getProductCode());
+        product.setProductName(dto.getProductName());
+        product.setBarcode(dto.getBarcode());
+        product.setUnit(dto.getUnit());
+        product.setSalePrice(dto.getSalePrice());
+
+        // 💡 三軌成本手動對應
+        product.setCostPrice(dto.getCostPrice());
+        product.setLastCostPrice(dto.getLastCostPrice());
+        product.setAvgCostPrice(dto.getAvgCostPrice());
+
+        if (dto.getStockQuantity() != null) {
+            product.setStockQuantity(dto.getStockQuantity());
+        }
+        if (dto.getSafetyStock() != null) {
+            product.setSafetyStock(dto.getSafetyStock());
+        }
+        product.setStatus(dto.isStatus());
+
+        return product;
+    }
 }
