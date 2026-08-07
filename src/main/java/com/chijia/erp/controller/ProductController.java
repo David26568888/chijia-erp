@@ -34,7 +34,7 @@ public class ProductController {
 	@GetMapping
 	public ResponseEntity<ApiResponse<List<ProductDTO>>> getAllProducts(){
 		List<ProductDTO> products = productService.getAllProducts();
-		return ResponseEntity.ok(ApiResponse.success(products));
+		return ResponseEntity.ok(ApiResponse.success("取得所有產品成功",products));
 	}
 	
 	// 2. 透過 ID 查詢單一產品：GET /api/v1/products/{id}
@@ -44,7 +44,7 @@ public class ProductController {
 		return ResponseEntity.ok(ApiResponse.success("商品用id查詢成功",product));
 	}
 	
-	// 3. 新增產品：POST /api/v1/products
+	// 3. 新增產品 (支援三軌成本欄位傳入) POST /api/v1/products
 	@PostMapping
 	public ResponseEntity<ApiResponse<ProductDTO>> createProduct(@RequestBody ProductDTO productDTO){
 		ProductDTO createdProduct = productService.createProduct(productDTO);
@@ -58,12 +58,12 @@ public class ProductController {
 	@PutMapping("/{id}")
 	public ResponseEntity<ApiResponse<ProductDTO>> updateProduct(@PathVariable Long id,@RequestBody ProductDTO productDTO){
 		ProductDTO updatedProduct = productService.updateProduct(id, productDTO);
-		return ResponseEntity.ok(ApiResponse.success("商品修改成功", updatedProduct));
+		return ResponseEntity.ok(ApiResponse.success("商品更新成功", updatedProduct));
 				
 	}
 	
-	// 5. 切換商品上架狀態：PATCH /api/v1/products/{id}/toggle
-	@PatchMapping("/{id}/toggle")
+	// 5. 切換商品上架狀態：PATCH /api/v1/products/{id}/toggle-status
+	@PatchMapping("/{id}/toggle-status")
 	public ResponseEntity<ApiResponse<Void>> toggleStatus(@PathVariable Long id){
 		productService.toggleStatus(id);
 		
@@ -74,7 +74,7 @@ public class ProductController {
 	
 	// 6. 依品名模糊搜尋：GET /api/v1/products/search?name=螺絲
 	@GetMapping("/search")
-	public ResponseEntity<ApiResponse<List<ProductDTO>>> getProductByName(@RequestParam String name){
+	public ResponseEntity<ApiResponse<List<ProductDTO>>> searchProductByName(@RequestParam String name){
 		List<ProductDTO> products = productService.searchProductByName(name);
 		return ResponseEntity.ok(ApiResponse.success("商品用名稱查詢成功", products));
 				
