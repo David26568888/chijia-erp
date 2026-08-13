@@ -25,6 +25,9 @@ public interface CustomerService {
     // 6. 切換啟用/停用狀態 (五金行實務上避免刪除客戶導致舊帳目崩潰，皆用狀態控制)[cite: 17]
     void toggleStatus(Long id);
 
-    // 7. 💡 解析並匯入客戶 Excel 資料 (災難復原與備份還原專用)[cite: 17]
+    // 7. 💡 解析舊ERP並匯入客戶 Excel 資料 (災難復原與備份還原專用)
     String importCustomersFromExcel(InputStream inputStream) throws Exception;
+
+ // 8. 💡 解析新系統excel 並匯入客戶 Excel 資料 (災難復原與備份還原專用)
+	String restoreCustomersFromBackup(InputStream inputStream) throws Exception;
 }

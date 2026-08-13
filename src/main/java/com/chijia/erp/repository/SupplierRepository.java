@@ -9,7 +9,10 @@ import com.chijia.erp.model.entity.Supplier;
 
 @Repository
 public interface SupplierRepository extends JpaRepository<Supplier, Long>{
-	// 實務需求：透過「廠商編號」快速查詢
+	
+	// 1. 透過「廠商編號」快速查詢
 	Optional<Supplier> findBySupplierCode(String supplierCode);
 
+	// 💡 2. 檢查「廠商編號」是否存在 (防止新建重複廠商編號)
+	boolean existsBySupplierCode(String supplierCode);
 }

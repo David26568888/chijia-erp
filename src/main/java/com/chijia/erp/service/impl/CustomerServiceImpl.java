@@ -105,6 +105,7 @@ public class CustomerServiceImpl implements CustomerService {
         customerRepository.save(customer);
     }
 
+    // 💡 1. 舊系統原始客戶報表匯入 (對應 客戶資料 Excel 結構，從第 5 行開始)
     @Override
     @Transactional
     public String importCustomersFromExcel(InputStream inputStream) throws Exception {
@@ -118,14 +119,16 @@ public class CustomerServiceImpl implements CustomerService {
         try (Workbook workbook = WorkbookFactory.create(inputStream)) {
             Sheet sheet = workbook.getSheetAt(0);
 
-            for (int i = 3; i <= sheet.getLastRowNum(); i++) {
+            for (int i = 4; i <= sheet.getLastRowNum(); i++) {
                 Row row = sheet.getRow(i);
                 if (row == null) continue;
 
                 String code = ExcelHelper.getCellValueAsString(row.getCell(0));
                 String shortName = ExcelHelper.getCellValueAsString(row.getCell(1));
 
-                if (code.isEmpty() || shortName.isEmpty()) continue;
+                if (code.isEmpty() || shortName.isEmpty() || code.contains("*") || shortName.contains("本報價單")) {
+                    continue;
+                }
 
                 if (existingCodes.contains(code)) {
                     skipCount++;
@@ -153,6 +156,51 @@ public class CustomerServiceImpl implements CustomerService {
                 successCount++;
             }
         }
-        return String.format("客戶資料匯入完成！成功匯入 %d 筆，跳過重複 %d 筆。", successCount, skipCount);
+        return String.format("原始客戶報表匯入完成！成功匯入 %d 筆，跳過重複或無效 %d 筆。", successCount, skipCount);
+    }
+
+    // 💡 2. 還原「系統自身產生的客戶備份檔」(標準 6 欄格式，從第 1 行開始)
+    @Override
+    @Transactional
+    public String restoreCustomersFromBackup(InputStream inputStream) throws Exception {
+        int successCount = 0;
+        int skipCount = 0;
+
+        Set<String> existingCodes = customerRepository.findAll().stream()
+                .map(Customer::getCustomerCode)
+                .collect(Collectors.toSet());
+
+        try (Workbook workbook = WorkbookFactory.create(inputStream)) {
+            Sheet sheet = workbook.getSheetAt(0);
+
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) continue;
+
+                String code = ExcelHelper.getCellValueAsString(row.getCell(0));
+                String shortName = ExcelHelper.getCellValueAsString(row.getCell(1));
+
+                if (code.isEmpty() || shortName.isEmpty()) continue;
+
+                if (existingCodes.contains(code)) {
+                    skipCount++;
+                    continue;
+                }
+
+                Customer customer = new Customer();
+                customer.setCustomerCode(code);
+                customer.setShortName(shortName);
+                customer.setFullName(ExcelHelper.getCellValueAsString(row.getCell(2)));
+                customer.setPhone(ExcelHelper.getCellValueAsString(row.getCell(3)));
+                customer.setContactPerson(ExcelHelper.getCellValueAsString(row.getCell(4)));
+                customer.setAddress(ExcelHelper.getCellValueAsString(row.getCell(5)));
+                customer.setStatus(true);
+
+                customerRepository.save(customer);
+                existingCodes.add(code);
+                successCount++;
+            }
+        }
+        return String.format("客戶備份還原完成！成功匯入 %d 筆，跳過重複 %d 筆。", successCount, skipCount);
     }
 }

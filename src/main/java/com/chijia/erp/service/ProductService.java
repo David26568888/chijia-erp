@@ -31,6 +31,9 @@ public interface ProductService {
     // 8. 依據產品編號（ProductCode）查詢單一產品
     ProductDTO getProductByProductCode(String productCode);
     
-   //9.解析並匯入商品 Excel 資料
+   //9.解析舊ERP的資料 並匯入商品 Excel 資料
     String importProductsFromExcel(InputStream inputStream) throws Exception;
+
+    //10. 還原系統自身產生的 11 欄標準備份檔
+	String restoreProductsFromBackup(InputStream inputStream) throws Exception;
 }

@@ -135,6 +135,7 @@ public class ProductServiceImpl implements ProductService {
         return productMapper.toDTO(product);
     }
 
+    //專門用就進銷存
     // 9. 解析並匯入商品 Excel 資料 (呼叫通用 ExcelHelper 工具類)
     @Override
     @Transactional
@@ -199,5 +200,62 @@ public class ProductServiceImpl implements ProductService {
         }
 
         return String.format("Excel 匯入完成！成功匯入 %d 筆，跳過（重複或無效） %d 筆。", successCount, skipCount);
+    }
+    
+ // 💡 專門用來還原「系統自身備份檔」 (格式為 11 個標準欄位，從第 1 行開始為資料)
+    @Override
+    @Transactional
+    public String restoreProductsFromBackup(InputStream inputStream) throws Exception {
+        int successCount = 0;
+        int skipCount = 0;
+
+        Set<String> existingCodes = productRepository.findAll().stream()
+                .map(Product::getProductCode)
+                .collect(Collectors.toSet());
+
+        try (Workbook workbook = WorkbookFactory.create(inputStream)) {
+            Sheet sheet = workbook.getSheetAt(0); // 讀取備份活頁簿
+
+            // 💡 系統備份檔的表頭在第 0 行，真實資料從第 1 行 (i=1) 開始！
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) continue;
+
+                String productCode = ExcelHelper.getCellValueAsString(row.getCell(0)); // 0: 商品編號
+                String productName = ExcelHelper.getCellValueAsString(row.getCell(2)); // 2: 商品名稱
+
+                if (productCode.isEmpty() || productName.isEmpty()) {
+                    continue;
+                }
+
+                if (existingCodes.contains(productCode)) {
+                    skipCount++;
+                    continue;
+                }
+
+                Product product = new Product();
+                product.setProductCode(productCode);
+                product.setBarcode(ExcelHelper.getCellValueAsString(row.getCell(1)));      // 1: 國際條碼
+                product.setProductName(productName);
+                product.setUnit(ExcelHelper.getCellValueAsString(row.getCell(3)));         // 3: 單位
+                
+                // 💡 讀取備份檔的標準財務與庫存欄位
+                product.setSalePrice(ExcelHelper.getCellValueAsBigDecimal(row.getCell(4), BigDecimal.ZERO));     // 4: 零售價
+                product.setCostPrice(ExcelHelper.getCellValueAsBigDecimal(row.getCell(5), BigDecimal.ZERO));     // 5: 基準成本
+                product.setLastCostPrice(ExcelHelper.getCellValueAsBigDecimal(row.getCell(6), BigDecimal.ZERO)); // 6: 最新進價
+                product.setAvgCostPrice(ExcelHelper.getCellValueAsBigDecimal(row.getCell(7), BigDecimal.ZERO));  // 7: 平均成本
+                product.setStockQuantity(ExcelHelper.getCellValueAsBigDecimal(row.getCell(8), BigDecimal.ZERO)); // 8: 庫存數量
+                product.setSafetyStock(ExcelHelper.getCellValueAsBigDecimal(row.getCell(9), BigDecimal.ZERO));   // 9: 安全存量
+                
+                String statusStr = ExcelHelper.getCellValueAsString(row.getCell(10)); // 10: 狀態
+                product.setStatus("上架".equals(statusStr) || statusStr.isEmpty());
+
+                productRepository.save(product);
+                existingCodes.add(productCode);
+                successCount++;
+            }
+        }
+
+        return String.format("系統備份還原完成！成功匯入 %d 筆，跳過重複 %d 筆。", successCount, skipCount);
     }
 }
