@@ -30,12 +30,22 @@ public class ProductController {
 	@Autowired
 	private ProductService productService;
 	
-	// 1. 查詢所有產品：GET /api/v1/products
-	@GetMapping
-	public ResponseEntity<ApiResponse<List<ProductDTO>>> getAllProducts(){
-		List<ProductDTO> products = productService.getAllProducts();
-		return ResponseEntity.ok(ApiResponse.success("取得所有產品成功",products));
-	}
+	// 1. 查詢產品 (支援關鍵字搜尋；若 keyword 為空則查詢全部)
+    @GetMapping
+    public ResponseEntity<ApiResponse<List<ProductDTO>>> getAllProducts(
+            @RequestParam(value = "keyword", required = false) String keyword) {
+        
+        List<ProductDTO> products;
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            // 有關鍵字時，進行模糊查詢
+            products = productService.searchProductByName(keyword.trim());
+        } else {
+            // 無關鍵字時，預設顯示所有產品
+            products = productService.getAllProducts();
+        }
+        
+        return ResponseEntity.ok(ApiResponse.success(products));
+    }
 	
 	// 2. 透過 ID 查詢單一產品：GET /api/v1/products/{id}
 	@GetMapping("/{id}")

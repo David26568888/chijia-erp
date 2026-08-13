@@ -1,7 +1,7 @@
 package com.chijia.erp.model.entity;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -21,38 +21,39 @@ import lombok.Data;
 @Table(name = "sale_order")
 public class SaleOrder {
 
-	@Id
+    @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-	private Long id;
-	
-	@Column(name = "sale_no", nullable = false, unique = true, length = 30)
-	private String saleNo;// 銷貨單號 (例如: SO-20260729-001)
-	
-	@Column(name = "customer_id")// 允許散客結帳 (可為 null)
-	private Long customerId;// 客戶ID
-	
-	@Column(name = "total_amount", nullable = false)
-	private BigDecimal totalAmount;// 銷貨總金額
-	
-	@Column(name = "order_date", nullable = false)
-	private LocalDateTime saleDate;// 銷貨時間
-	
-	private String remark;// 銷貨備註
-	
-	// 💡 建立與明細檔的一對多關聯 (CascadeType.ALL 確保連動儲存明細)
-	@OneToMany(mappedBy = "saleOrder", cascade = CascadeType.ALL ,orphanRemoval = true)
-	private List<SaleOrderItem> items= new ArrayList<>();
-	
-	// 💡 方便新增明細的雙向關聯輔助方法
-	public void addItem(SaleOrderItem item) {
-		items.add(item);
-		item.setSaleOrder(this);
-	}
-	
-	@PrePersist
-	public void onCreate() {
-		if(this.saleDate == null) {
-			this.saleDate = LocalDateTime.now();
-		}
-	}
+    private Long id;
+
+    @Column(name = "sale_no", nullable = false, unique = true, length = 30)
+    private String saleNo; // 銷貨單號 (例如: SO-20260813-XXXX)
+
+    @Column(name = "customer_id")
+    private Long customerId; // 客戶 ID (允許為 null 代表散客)
+
+    @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
+    private BigDecimal totalAmount = BigDecimal.ZERO; // 實收總金額
+
+    @Column(name = "discount_amount", precision = 12, scale = 2)
+    private BigDecimal discountAmount = BigDecimal.ZERO; // 💡 整單折讓/折扣金額
+
+    @Column(name = "sale_date", nullable = false)
+    private LocalDate saleDate; // 銷貨日期
+
+    private String remark; // 銷貨備註
+
+    @OneToMany(mappedBy = "saleOrder", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<SaleOrderItem> items = new ArrayList<>();
+
+    public void addItem(SaleOrderItem item) {
+        items.add(item);
+        item.setSaleOrder(this);
+    }
+
+    @PrePersist
+    public void onCreate() {
+        if (this.saleDate == null) {
+            this.saleDate = LocalDate.now();
+        }
+    }
 }

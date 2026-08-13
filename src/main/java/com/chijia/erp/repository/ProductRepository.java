@@ -22,4 +22,9 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     // 💡 4. 補強需求：商品名稱不分大小寫模糊查詢 (搜尋體驗更佳)
     List<Product> findByProductNameContainingIgnoreCase(String productName);
+    
+    //5.補強增強搜尋
+    List<Product> findByProductNameContainingIgnoreCaseOrProductCodeContainingIgnoreCaseOrBarcodeContainingIgnoreCase(
+    	    String name, String code, String barcode
+    	);
 }

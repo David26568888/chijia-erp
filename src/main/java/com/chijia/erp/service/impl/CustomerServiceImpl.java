@@ -1,9 +1,8 @@
 package com.chijia.erp.service.impl;
 
 import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.apache.poi.ss.usermodel.Row;
@@ -21,139 +20,139 @@ import com.chijia.erp.repository.CustomerRepository;
 import com.chijia.erp.service.CustomerService;
 import com.chijia.erp.util.ExcelHelper;
 
-
 @Service
-public class CustomerServiceImpl implements CustomerService{
-	
-	@Autowired
-	private CustomerRepository customerRepository;
-	
-	@Autowired
-	private CustomerMapper customerMapper;
+public class CustomerServiceImpl implements CustomerService {
 
-	@Override
-	public List<CustomerDTO> getAllCustomers() {
-		return customerRepository.findAll().stream()
-				.map(customerMapper::toDTO)
-				.collect(Collectors.toList());
-	}
+    @Autowired
+    private CustomerRepository customerRepository;
 
-	@Override
-	public CustomerDTO getCustomerById(Long id) {
-		 Customer customer= customerRepository.findById(id)
-				.orElseThrow(()-> new RuntimeException("找不到該客戶，ID:" + id));
-		 return customerMapper.toDTO(customer);
-	}
+    @Autowired
+    private CustomerMapper customerMapper;
 
-	@Override
-	@Transactional
-	public CustomerDTO creatCustomer(CustomerDTO customerDTO) {
-		if(customerRepository.findByCustomerCode(customerDTO.getCustomerCode()).isPresent()) {
-			throw new RuntimeException("客戶編號 [" + customerDTO.getCustomerCode() + "] 已存在，無法新增");
-		}
-		
-		Customer customer = customerMapper.toEntity(customerDTO);
-		customer.setStatus(true);// 新增預設為啟用
-		Customer savedCustomer = customerRepository.save(customer);
-		
-		return customerMapper.toDTO(savedCustomer);
-	}
+    @Override
+    public List<CustomerDTO> getAllCustomers() {
+        return customerRepository.findAll().stream()
+                .map(customerMapper::toDTO)
+                .collect(Collectors.toList());
+    }
 
-	@Override
-	@Transactional
-	public CustomerDTO updateCustomer(Long id, CustomerDTO customerDTO) {
-		Customer existingCustomer = customerRepository.findById(id)
-				.orElseThrow(() -> new RuntimeException("找不到該客戶，無法更新！ID: " + id));
-	
-		// 覆蓋前端傳入的新欄位 (ID 保持不動)
-		existingCustomer.setShortName(customerDTO.getShortName());
-        existingCustomer.setFullName(customerDTO.getFullName());
-        existingCustomer.setContactPerson(customerDTO.getContactPerson());
-        existingCustomer.setPhone(customerDTO.getPhone());
-        existingCustomer.setMobile(customerDTO.getMobile());
-        existingCustomer.setTaxId(customerDTO.getTaxId());
-        existingCustomer.setCompanyAddress(customerDTO.getCompanyAddress());
-        existingCustomer.setCheckoutDay(customerDTO.getCheckoutDay());
-        existingCustomer.setInvoiceType(customerDTO.getInvoiceType());
-        existingCustomer.setInvoiceTitle(customerDTO.getInvoiceTitle());
-        existingCustomer.setRemark(customerDTO.getRemark());
-        
-        Customer updatCustomer = customerRepository.save(existingCustomer);
-        return customerMapper.toDTO(updatCustomer);
-	}
+    @Override
+    public List<CustomerDTO> searchCustomers(String keyword) {
+        if (keyword == null || keyword.trim().isEmpty()) {
+            return getAllCustomers();
+        }
+        String kw = keyword.trim();
+        return customerRepository
+                .findByShortNameContainingIgnoreCaseOrCustomerCodeContainingIgnoreCaseOrPhoneContainingIgnoreCase(kw, kw, kw)
+                .stream()
+                .map(customerMapper::toDTO)
+                .collect(Collectors.toList());
+    }
 
-	@Override
-	@Transactional
-	public void toggleStatus(Long id) {
-		Customer customer = customerRepository.findById(id)
-				.orElseThrow(()-> new RuntimeException("找不到該客戶，無法切換狀態！ID: " + id));
-		customer.setStatus(!customer.isStatus());
-		customerRepository.save(customer);
-		
-	}
+    @Override
+    public CustomerDTO getCustomerById(Long id) {
+        Customer customer = customerRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("找不到客戶，ID: " + id));
+        return customerMapper.toDTO(customer);
+    }
 
-	@Override
-	@Transactional(rollbackFor = Exception.class) // 💡 確保若匯入出錯，整批 Rollback
-	public String importCustomersFromExcel(InputStream inputStream) throws Exception {
-	    Workbook workbook = WorkbookFactory.create(inputStream);
-	    
-	    // 讀取客戶資料分頁 "bcust"
-	    Sheet sheet = workbook.getSheet("bcust");
-	    if (sheet == null) {
-	        sheet = workbook.getSheetAt(0);
-	    }
+    @Override
+    @Transactional
+    public CustomerDTO createCustomer(CustomerDTO dto) {
+        if (dto.getCustomerCode() != null && customerRepository.existsByCustomerCode(dto.getCustomerCode())) {
+            throw new RuntimeException("客戶編號已存在: " + dto.getCustomerCode());
+        }
+        Customer customer = customerMapper.toEntity(dto);
+        Customer savedCustomer = customerRepository.save(customer);
+        return customerMapper.toDTO(savedCustomer);
+    }
 
-	    List<Customer> customerList = new ArrayList<>();
-	    int importCount = 0;
+    @Override
+    @Transactional
+    public CustomerDTO updateCustomer(Long id, CustomerDTO dto) {
+        Customer existing = customerRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("找不到客戶，ID: " + id));
 
-	    // 💡 修正 1：資料從第 5 列 (Index = 4) 開始讀取
-	    for (int i = 4; i <= sheet.getLastRowNum(); i++) {
-	        Row row = sheet.getRow(i);
-	        if (row == null) {
-	            continue;
-	        }
+        if (dto.getCustomerCode() != null && !dto.getCustomerCode().trim().isEmpty()) {
+            existing.setCustomerCode(dto.getCustomerCode().trim());
+        }
+        existing.setShortName(dto.getShortName());
+        existing.setFullName(dto.getFullName());
+        existing.setContactPerson(dto.getContactPerson());
+        existing.setPhone(dto.getPhone());
+        existing.setMobile(dto.getMobile());
+        existing.setFax(dto.getFax());
+        existing.setTaxId(dto.getTaxId());
+        existing.setEmail(dto.getEmail());
+        existing.setAddress(dto.getAddress());
+        existing.setDeliveryAddress(dto.getDeliveryAddress());
+        existing.setCheckoutDay(dto.getCheckoutDay() != null ? dto.getCheckoutDay() : 31);
+        existing.setInvoiceType(dto.getInvoiceType());
+        existing.setInvoiceTitle(dto.getInvoiceTitle());
+        existing.setRemark(dto.getRemark());
+        existing.setStatus(dto.isStatus());
 
-	        String customerCode = ExcelHelper.getCellValueAsString(row.getCell(0));
-	        
-	        // 💡 修正 2：過濾空白列與星號過路客標記 (* 或 **)
-	        if (customerCode.isEmpty() || "*".equals(customerCode) || "**".equals(customerCode)) {
-	            continue;
-	        }
+        Customer updated = customerRepository.save(existing);
+        return customerMapper.toDTO(updated);
+    }
 
-	        Customer customer = new Customer();
-	        customer.setCustomerCode(customerCode);                                   // Col 0: 客戶編號
-	        customer.setShortName(ExcelHelper.getCellValueAsString(row.getCell(1))); // Col 1: 客戶簡稱
-	        customer.setPhone(ExcelHelper.getCellValueAsString(row.getCell(4)));     // Col 4: 電話1
-	        customer.setMobile(ExcelHelper.getCellValueAsString(row.getCell(5)));    // Col 5: 行動電話1
-	        customer.setFullName(ExcelHelper.getCellValueAsString(row.getCell(14))); // Col 14: 客戶名稱
-	        customer.setTaxId(ExcelHelper.getCellValueAsString(row.getCell(26)));    // Col 26: 統一編號
-	        customer.setCompanyAddress(ExcelHelper.getCellValueAsString(row.getCell(32))); // Col 32: 公司地址
-	        customer.setStatus(true);
+    @Override
+    @Transactional
+    public void toggleStatus(Long id) {
+        Customer customer = customerRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("找不到客戶，ID: " + id));
+        customer.setStatus(!customer.isStatus());
+        customerRepository.save(customer);
+    }
 
-	        // 防重複匯入：利用客戶編號檢查
-	        Optional<Customer> existingCustomerOpt = customerRepository.findByCustomerCode(customerCode);
-	        if (existingCustomerOpt.isPresent()) {
-	            Customer existingCustomer = existingCustomerOpt.get();
-	            existingCustomer.setShortName(customer.getShortName());
-	            existingCustomer.setPhone(customer.getPhone());
-	            existingCustomer.setMobile(customer.getMobile());
-	            existingCustomer.setFullName(customer.getFullName());
-	            existingCustomer.setTaxId(customer.getTaxId());
-	            existingCustomer.setCompanyAddress(customer.getCompanyAddress());
-	            customerList.add(existingCustomer);
-	        } else {
-	            customerList.add(customer);
-	        }
+    @Override
+    @Transactional
+    public String importCustomersFromExcel(InputStream inputStream) throws Exception {
+        int successCount = 0;
+        int skipCount = 0;
 
-	        importCount++;
-	    }
+        Set<String> existingCodes = customerRepository.findAll().stream()
+                .map(Customer::getCustomerCode)
+                .collect(Collectors.toSet());
 
-	    if (!customerList.isEmpty()) {
-	        customerRepository.saveAll(customerList);
-	    }
+        try (Workbook workbook = WorkbookFactory.create(inputStream)) {
+            Sheet sheet = workbook.getSheetAt(0);
 
-	    workbook.close();
-	    return "成功匯入/更新 " + importCount + " 筆客戶資料！";
-	}
+            for (int i = 3; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) continue;
 
+                String code = ExcelHelper.getCellValueAsString(row.getCell(0));
+                String shortName = ExcelHelper.getCellValueAsString(row.getCell(1));
+
+                if (code.isEmpty() || shortName.isEmpty()) continue;
+
+                if (existingCodes.contains(code)) {
+                    skipCount++;
+                    continue;
+                }
+
+                Customer customer = new Customer();
+                customer.setCustomerCode(code);
+                customer.setShortName(shortName);
+                customer.setContactPerson(ExcelHelper.getCellValueAsString(row.getCell(3)));
+                customer.setPhone(ExcelHelper.getCellValueAsString(row.getCell(4)));
+                customer.setMobile(ExcelHelper.getCellValueAsString(row.getCell(5)));
+                customer.setFax(ExcelHelper.getCellValueAsString(row.getCell(6)));
+                customer.setFullName(ExcelHelper.getCellValueAsString(row.getCell(14)));
+                customer.setTaxId(ExcelHelper.getCellValueAsString(row.getCell(26)));
+                customer.setAddress(ExcelHelper.getCellValueAsString(row.getCell(32)));
+                customer.setDeliveryAddress(ExcelHelper.getCellValueAsString(row.getCell(36)));
+                customer.setEmail(ExcelHelper.getCellValueAsString(row.getCell(39)));
+                customer.setRemark(ExcelHelper.getCellValueAsString(row.getCell(40)));
+                customer.setInvoiceTitle(ExcelHelper.getCellValueAsString(row.getCell(50)));
+                customer.setStatus(true);
+
+                customerRepository.save(customer);
+                existingCodes.add(code);
+                successCount++;
+            }
+        }
+        return String.format("客戶資料匯入完成！成功匯入 %d 筆，跳過重複 %d 筆。", successCount, skipCount);
+    }
 }

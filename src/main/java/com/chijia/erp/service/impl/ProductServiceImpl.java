@@ -76,7 +76,7 @@ public class ProductServiceImpl implements ProductService {
     public ProductDTO updateProduct(Long id, ProductDTO productDTO) {
         Product existingProduct = productRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("找不到該產品，無法更新！ID: " + id));
-
+        existingProduct.setProductCode(productDTO.getProductCode());
         existingProduct.setProductName(productDTO.getProductName());
         existingProduct.setBarcode(productDTO.getBarcode());
         existingProduct.setUnit(productDTO.getUnit());
@@ -111,10 +111,12 @@ public class ProductServiceImpl implements ProductService {
 
     // 6. 五金行必備：依據品名規格模糊搜尋產品
     @Override
-    public List<ProductDTO> searchProductByName(String name) {
-        return productRepository.findByProductNameContainingIgnoreCase(name).stream()
-                .map(productMapper::toDTO)
-                .collect(Collectors.toList());
+    public List<ProductDTO> searchProductByName(String keyword) {
+        return productRepository.findByProductNameContainingIgnoreCaseOrProductCodeContainingIgnoreCaseOrBarcodeContainingIgnoreCase(
+                keyword, keyword, keyword
+        ).stream()
+        .map(productMapper::toDTO)
+        .collect(Collectors.toList());
     }
 
     // 7. 依據條碼（Barcode）查詢單一產品 (櫃檯掃描槍用)

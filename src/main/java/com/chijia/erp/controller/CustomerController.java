@@ -48,7 +48,7 @@ public class CustomerController {
 	// 3. 新增客戶：POST /api/v1/customers
 	@PostMapping
 	public ResponseEntity<ApiResponse<CustomerDTO>> creatCustomer(@RequestBody CustomerDTO customerDTO){
-		CustomerDTO createdCustomer = customerService.creatCustomer(customerDTO);
+		CustomerDTO createdCustomer = customerService.createCustomer(customerDTO);
 		return new ResponseEntity<>(ApiResponse.success("客戶新增成功", createdCustomer),
 				HttpStatus.CREATED);	// 回傳 201 Created
 	}

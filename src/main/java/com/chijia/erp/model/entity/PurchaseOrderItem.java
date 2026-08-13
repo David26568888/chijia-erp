@@ -15,30 +15,32 @@ import lombok.Data;
 
 @Data
 @Entity
-@Table(name="purchase_order_item")
+@Table(name = "purchase_order_item")
 public class PurchaseOrderItem {
-	
-	@Id
-	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	private Long id;
-	
-	// 💡 多對一關聯回進貨單主檔
-	@ManyToOne(fetch = FetchType.LAZY)
-	@JoinColumn(name="purchase_order_id",nullable = false)
-	private PurchaseOrder purchaseOrder;
-	
-	@Column(name = "product_id",nullable = false)
-	private Long productId;// 進貨商品ID
-	
-	@Column(name = "product_name")
-	private String productName;// 備份商品名稱 (避免商品未來改名影響歷史進貨紀錄)
-	
-	@Column(nullable = false)
-	private BigDecimal quantity = BigDecimal.ZERO; // 進貨數量 (支援小數位，如 1.5 尺)
-	
-	@Column(name = "unit_price", nullable = false, precision = 12, scale = 2)
-    private BigDecimal unitPrice = BigDecimal.ZERO;
-	
-	@Column(name = "subtotal", nullable = false, precision = 12, scale = 2)
-    private BigDecimal subtotal = BigDecimal.ZERO;
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "purchase_order_id", nullable = false)
+    private PurchaseOrder purchaseOrder;
+
+    @Column(name = "product_id", nullable = false)
+    private Long productId; // 商品 ID
+
+    @Column(name = "product_code")
+    private String productCode; // 備份商品編號
+
+    @Column(name = "product_name")
+    private String productName; // 備份商品名稱
+
+    @Column(name = "quantity", nullable = false, precision = 12, scale = 2)
+    private BigDecimal quantity = BigDecimal.ZERO; // 進貨數量
+
+    @Column(name = "unit_price", nullable = false, precision = 12, scale = 2)
+    private BigDecimal unitPrice = BigDecimal.ZERO; // 進貨單價
+
+    @Column(name = "subtotal", nullable = false, precision = 12, scale = 2)
+    private BigDecimal subtotal = BigDecimal.ZERO; // 小計金額
 }
