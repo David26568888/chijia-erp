@@ -43,4 +43,14 @@ public class SaleOrderItem {
 
     @Column(name = "subtotal", nullable = false, precision = 12, scale = 2)
     private BigDecimal subtotal = BigDecimal.ZERO; // 項目小計
+    
+ // 在 SaleOrderItem.java 中新增以下欄位：
+    @Column(name = "cost_price", nullable = false, precision = 12, scale = 2)
+    private BigDecimal costPrice = BigDecimal.ZERO; // 💡 銷售當下的單位成本
+
+    @Column(name = "total_cost", nullable = false, precision = 12, scale = 2)
+    private BigDecimal totalCost = BigDecimal.ZERO; // 💡 項目總成本 (costPrice * quantity)
+
+    @Column(name = "gross_profit", nullable = false, precision = 12, scale = 2)
+    private BigDecimal grossProfit = BigDecimal.ZERO; // 💡 項目毛利 (subtotal - totalCost)
 }

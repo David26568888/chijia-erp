@@ -23,6 +23,9 @@ public class CreateSaleOrderDTO {
 
     // 💡 整單折讓 / 折扣金額 (例如：去零頭 50 元)
     private BigDecimal discountAmount = BigDecimal.ZERO;
+    
+ // 💡 是否同步扣減庫存 (預設為 true；若是舊系統歷史資料匯入/修復，可設為 false)
+    private boolean deductStock = true;
 
     // 銷貨商品明細列表 (至少需包含一項商品)
     @NotEmpty(message = "銷貨單必須包含至少一項商品！")

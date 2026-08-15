@@ -27,5 +27,10 @@ public class SaleOrderDTO {
         private BigDecimal quantity;
         private BigDecimal unitPrice;
         private BigDecimal subtotal;
+        
+        // 💡【新增】前端也可以看到每個商品的成本與毛利
+        private BigDecimal costPrice;
+        private BigDecimal totalCost;
+        private BigDecimal grossProfit;
     }
 }
