@@ -11,15 +11,22 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.chijia.erp.mapper.ProductMapper;
 import com.chijia.erp.model.dto.ProductDTO;
+import com.chijia.erp.model.dto.ProductHistoryDTO;
+import com.chijia.erp.model.entity.Customer;
 import com.chijia.erp.model.entity.Product;
+import com.chijia.erp.model.entity.Supplier;
 import com.chijia.erp.repository.ProductRepository;
+import com.chijia.erp.repository.PurchaseOrderItemRepository;
+import com.chijia.erp.repository.SaleOrderItemRepository;
 import com.chijia.erp.service.ProductService;
-import com.chijia.erp.util.ExcelHelper; // 💡 引入統一的 Excel 工具類
+import com.chijia.erp.util.ExcelHelper;
 
 @Service
 public class ProductServiceImpl implements ProductService {
@@ -28,7 +35,13 @@ public class ProductServiceImpl implements ProductService {
     private ProductRepository productRepository;
 
     @Autowired
-    private ProductMapper productMapper; // 手動 Mapper
+    private PurchaseOrderItemRepository purchaseOrderItemRepository;
+
+    @Autowired
+    private SaleOrderItemRepository saleOrderItemRepository;
+    
+    @Autowired
+    private ProductMapper productMapper;
 
     // 1. 查詢所有產品
     @Override
@@ -135,35 +148,31 @@ public class ProductServiceImpl implements ProductService {
         return productMapper.toDTO(product);
     }
 
-    //專門用就進銷存
-    // 9. 解析並匯入商品 Excel 資料 (呼叫通用 ExcelHelper 工具類)
+    // 9. 解析並匯入商品 Excel 資料
     @Override
     @Transactional
     public String importProductsFromExcel(InputStream inputStream) throws Exception {
         int successCount = 0;
         int skipCount = 0;
 
-        // 💡 高效能比對：將 DB 既有產品編號載入記憶體 Set 中
         Set<String> existingCodes = productRepository.findAll().stream()
                 .map(Product::getProductCode)
                 .collect(Collectors.toSet());
 
         try (Workbook workbook = WorkbookFactory.create(inputStream)) {
-            Sheet sheet = workbook.getSheetAt(0); // 讀取第一個工作表
+            Sheet sheet = workbook.getSheetAt(0);
 
-            // 💡 表頭偏移處理：前 3 列為抬頭/日期資訊，第 4 列(i=3)為標題，第一筆真實商品從第 5 列(i=4)開始
             for (int i = 4; i <= sheet.getLastRowNum(); i++) {
                 Row row = sheet.getRow(i);
                 if (row == null) continue;
 
-                String productCode = ExcelHelper.getCellValueAsString(row.getCell(0)); // 索引 0: 產品編號
-                String productName = ExcelHelper.getCellValueAsString(row.getCell(1)); // 索引 1: 品名規格
+                String productCode = ExcelHelper.getCellValueAsString(row.getCell(0));
+                String productName = ExcelHelper.getCellValueAsString(row.getCell(1));
 
                 if (productCode.isEmpty() || productName.isEmpty()) {
-                    continue; // 必填欄位空白則跳過
+                    continue;
                 }
 
-                // 若產品編號已存在則跳過，避免重複匯入
                 if (existingCodes.contains(productCode)) {
                     skipCount++;
                     continue;
@@ -172,17 +181,16 @@ public class ProductServiceImpl implements ProductService {
                 Product product = new Product();
                 product.setProductCode(productCode);
                 product.setProductName(productName);
-                product.setBarcode(ExcelHelper.getCellValueAsString(row.getCell(2))); // 索引 2: 條碼
-                product.setUnit(ExcelHelper.getCellValueAsString(row.getCell(3)));    // 索引 3: 單位
+                product.setBarcode(ExcelHelper.getCellValueAsString(row.getCell(2)));
+                product.setUnit(ExcelHelper.getCellValueAsString(row.getCell(3)));
 
-                // 💡 讀取價格、三軌成本與庫存 (使用高精度 ExcelHelper)
-                BigDecimal salePrice     = ExcelHelper.getCellValueAsBigDecimal(row.getCell(6), BigDecimal.ZERO);  // 索引 6: 售價
-                BigDecimal lastCostPrice = ExcelHelper.getCellValueAsBigDecimal(row.getCell(8), BigDecimal.ZERO);  // 索引 8: 進價 (最後進價)
-                BigDecimal costPrice     = ExcelHelper.getCellValueAsBigDecimal(row.getCell(10), BigDecimal.ZERO); // 索引 10: 期初單位成本 (基準成本)
-                BigDecimal avgCostPrice  = ExcelHelper.getCellValueAsBigDecimal(row.getCell(65), BigDecimal.ZERO); // 索引 65: 移動加權平均成本
+                BigDecimal salePrice     = ExcelHelper.getCellValueAsBigDecimal(row.getCell(6), BigDecimal.ZERO);
+                BigDecimal lastCostPrice = ExcelHelper.getCellValueAsBigDecimal(row.getCell(8), BigDecimal.ZERO);
+                BigDecimal costPrice     = ExcelHelper.getCellValueAsBigDecimal(row.getCell(10), BigDecimal.ZERO);
+                BigDecimal avgCostPrice  = ExcelHelper.getCellValueAsBigDecimal(row.getCell(65), BigDecimal.ZERO);
 
-                BigDecimal stockQty      = ExcelHelper.getCellValueAsBigDecimal(row.getCell(25), BigDecimal.ZERO); // 索引 25: 庫存總數量
-                BigDecimal safetyStock   = ExcelHelper.getCellValueAsBigDecimal(row.getCell(13), BigDecimal.ZERO); // 索引 13: 安全存量
+                BigDecimal stockQty      = ExcelHelper.getCellValueAsBigDecimal(row.getCell(25), BigDecimal.ZERO);
+                BigDecimal safetyStock   = ExcelHelper.getCellValueAsBigDecimal(row.getCell(13), BigDecimal.ZERO);
 
                 product.setSalePrice(salePrice);
                 product.setCostPrice(costPrice.compareTo(BigDecimal.ZERO) > 0 ? costPrice : lastCostPrice);
@@ -194,7 +202,7 @@ public class ProductServiceImpl implements ProductService {
                 product.setStatus(true);
 
                 productRepository.save(product);
-                existingCodes.add(productCode); // 同步更新記憶體快取
+                existingCodes.add(productCode);
                 successCount++;
             }
         }
@@ -202,7 +210,7 @@ public class ProductServiceImpl implements ProductService {
         return String.format("Excel 匯入完成！成功匯入 %d 筆，跳過（重複或無效） %d 筆。", successCount, skipCount);
     }
     
- // 💡 專門用來還原「系統自身備份檔」 (格式為 11 個標準欄位，從第 1 行開始為資料)
+    // 10. 系統備份還原
     @Override
     @Transactional
     public String restoreProductsFromBackup(InputStream inputStream) throws Exception {
@@ -214,15 +222,14 @@ public class ProductServiceImpl implements ProductService {
                 .collect(Collectors.toSet());
 
         try (Workbook workbook = WorkbookFactory.create(inputStream)) {
-            Sheet sheet = workbook.getSheetAt(0); // 讀取備份活頁簿
+            Sheet sheet = workbook.getSheetAt(0);
 
-            // 💡 系統備份檔的表頭在第 0 行，真實資料從第 1 行 (i=1) 開始！
             for (int i = 1; i <= sheet.getLastRowNum(); i++) {
                 Row row = sheet.getRow(i);
                 if (row == null) continue;
 
-                String productCode = ExcelHelper.getCellValueAsString(row.getCell(0)); // 0: 商品編號
-                String productName = ExcelHelper.getCellValueAsString(row.getCell(2)); // 2: 商品名稱
+                String productCode = ExcelHelper.getCellValueAsString(row.getCell(0));
+                String productName = ExcelHelper.getCellValueAsString(row.getCell(2));
 
                 if (productCode.isEmpty() || productName.isEmpty()) {
                     continue;
@@ -235,19 +242,18 @@ public class ProductServiceImpl implements ProductService {
 
                 Product product = new Product();
                 product.setProductCode(productCode);
-                product.setBarcode(ExcelHelper.getCellValueAsString(row.getCell(1)));      // 1: 國際條碼
+                product.setBarcode(ExcelHelper.getCellValueAsString(row.getCell(1)));
                 product.setProductName(productName);
-                product.setUnit(ExcelHelper.getCellValueAsString(row.getCell(3)));         // 3: 單位
+                product.setUnit(ExcelHelper.getCellValueAsString(row.getCell(3)));
                 
-                // 💡 讀取備份檔的標準財務與庫存欄位
-                product.setSalePrice(ExcelHelper.getCellValueAsBigDecimal(row.getCell(4), BigDecimal.ZERO));     // 4: 零售價
-                product.setCostPrice(ExcelHelper.getCellValueAsBigDecimal(row.getCell(5), BigDecimal.ZERO));     // 5: 基準成本
-                product.setLastCostPrice(ExcelHelper.getCellValueAsBigDecimal(row.getCell(6), BigDecimal.ZERO)); // 6: 最新進價
-                product.setAvgCostPrice(ExcelHelper.getCellValueAsBigDecimal(row.getCell(7), BigDecimal.ZERO));  // 7: 平均成本
-                product.setStockQuantity(ExcelHelper.getCellValueAsBigDecimal(row.getCell(8), BigDecimal.ZERO)); // 8: 庫存數量
-                product.setSafetyStock(ExcelHelper.getCellValueAsBigDecimal(row.getCell(9), BigDecimal.ZERO));   // 9: 安全存量
+                product.setSalePrice(ExcelHelper.getCellValueAsBigDecimal(row.getCell(4), BigDecimal.ZERO));
+                product.setCostPrice(ExcelHelper.getCellValueAsBigDecimal(row.getCell(5), BigDecimal.ZERO));
+                product.setLastCostPrice(ExcelHelper.getCellValueAsBigDecimal(row.getCell(6), BigDecimal.ZERO));
+                product.setAvgCostPrice(ExcelHelper.getCellValueAsBigDecimal(row.getCell(7), BigDecimal.ZERO));
+                product.setStockQuantity(ExcelHelper.getCellValueAsBigDecimal(row.getCell(8), BigDecimal.ZERO));
+                product.setSafetyStock(ExcelHelper.getCellValueAsBigDecimal(row.getCell(9), BigDecimal.ZERO));
                 
-                String statusStr = ExcelHelper.getCellValueAsString(row.getCell(10)); // 10: 狀態
+                String statusStr = ExcelHelper.getCellValueAsString(row.getCell(10));
                 product.setStatus("上架".equals(statusStr) || statusStr.isEmpty());
 
                 productRepository.save(product);
@@ -257,5 +263,56 @@ public class ProductServiceImpl implements ProductService {
         }
 
         return String.format("系統備份還原完成！成功匯入 %d 筆，跳過重複 %d 筆。", successCount, skipCount);
+    }
+
+ // 11. 查看商品相關進貨紀錄 / 銷貨紀錄
+    @Override
+    public ProductHistoryDTO getProductHistory(Long productId) {
+        // 取最新的前 20 筆歷史紀錄
+        PageRequest pageRequest = PageRequest.of(0, 20);
+
+        // 💡 1. 撈取進貨歷史 (傳入變數 productId 與 pageRequest，非型態名稱)
+        List<ProductHistoryDTO.PurchaseRecordDTO> purchaseHistory = purchaseOrderItemRepository
+                .findRecentHistoryByProductId(productId, pageRequest)
+                .stream()
+                .map(item -> {
+                    String supplierName = "門市進貨";
+                    if (item.getPurchaseOrder() != null && item.getPurchaseOrder().getSupplier() != null) {
+                        Supplier supplier = item.getPurchaseOrder().getSupplier();
+                        supplierName = supplier.getShortName() != null && !supplier.getShortName().isBlank()
+                                ? supplier.getShortName() 
+                                : supplier.getFullName();
+                    }
+                    return new ProductHistoryDTO.PurchaseRecordDTO(
+                            supplierName,
+                            item.getPurchaseOrder() != null ? item.getPurchaseOrder().getPurchaseDate() : null,
+                            item.getUnitPrice(),
+                            item.getQuantity()
+                    );
+                })
+                .collect(Collectors.toList());
+
+        // 💡 2. 撈取銷貨歷史
+        List<ProductHistoryDTO.SaleRecordDTO> saleHistory = saleOrderItemRepository
+                .findRecentHistoryByProductId(productId, pageRequest)
+                .stream()
+                .map(item -> {
+                    String customerName = "門市散客";
+                    if (item.getSaleOrder() != null && item.getSaleOrder().getCustomer() != null) {
+                        Customer customer = item.getSaleOrder().getCustomer();
+                        customerName = customer.getShortName() != null && !customer.getShortName().isBlank()
+                                ? customer.getShortName() 
+                                : customer.getFullName();
+                    }
+                    return new ProductHistoryDTO.SaleRecordDTO(
+                            customerName,
+                            item.getSaleOrder() != null ? item.getSaleOrder().getSaleDate() : null,
+                            item.getUnitPrice(),
+                            item.getQuantity()
+                    );
+                })
+                .collect(Collectors.toList());
+
+        return new ProductHistoryDTO(purchaseHistory, saleHistory);
     }
 }

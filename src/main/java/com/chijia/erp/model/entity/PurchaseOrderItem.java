@@ -26,8 +26,13 @@ public class PurchaseOrderItem {
     @JoinColumn(name = "purchase_order_id", nullable = false)
     private PurchaseOrder purchaseOrder;
 
-    @Column(name = "product_id", nullable = false)
+    @Column(name = "product_id", insertable = false, updatable = false)
     private Long productId; // 商品 ID
+    
+    // 💡 補上：與 Product 的物件關聯
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_id", nullable = false)
+    private Product product;
 
     @Column(name = "product_code")
     private String productCode; // 備份商品編號

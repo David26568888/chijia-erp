@@ -10,6 +10,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +22,7 @@ import com.chijia.erp.model.entity.SaleOrder;
 import com.chijia.erp.model.entity.SaleOrderItem;
 import com.chijia.erp.repository.CustomerRepository;
 import com.chijia.erp.repository.ProductRepository;
+import com.chijia.erp.repository.SaleOrderItemRepository;
 import com.chijia.erp.repository.SaleOrderRepository;
 import com.chijia.erp.service.SaleOrderService;
 
@@ -29,6 +31,9 @@ public class SaleOrderServiceImpl implements SaleOrderService {
 
     @Autowired
     private SaleOrderRepository saleOrderRepository;
+
+    @Autowired
+    private SaleOrderItemRepository saleOrderItemRepository;
 
     @Autowired
     private ProductRepository productRepository;
@@ -57,10 +62,11 @@ public class SaleOrderServiceImpl implements SaleOrderService {
                         String kw = keyword.trim().toLowerCase();
                         boolean matchNo = o.getSaleNo() != null && o.getSaleNo().toLowerCase().contains(kw);
                         
+                        // 💡 採用 JPA 物件關聯：直接透過 o.getCustomer() 取得客戶名稱
                         String custName = "";
-                        if (o.getCustomerId() != null) {
-                            custName = customerRepository.findById(o.getCustomerId())
-                                    .map(Customer::getShortName).orElse("");
+                        if (o.getCustomer() != null) {
+                            custName = o.getCustomer().getShortName() != null ? 
+                                       o.getCustomer().getShortName() : o.getCustomer().getFullName();
                         }
                         boolean matchCust = custName.toLowerCase().contains(kw);
                         matchKw = matchNo || matchCust;
@@ -84,22 +90,28 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     // 3. 依 ID 查詢單一銷貨單
     @Override
     public SaleOrderDTO getSaleOrderById(Long id) {
+        if (id == null) {
+            throw new IllegalArgumentException("查詢失敗：銷貨單 ID 不能為空！");
+        }
         SaleOrder saleOrder = saleOrderRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("找不到銷貨單，ID: " + id));
         return convertToDTO(saleOrder);
     }
 
-    // 4. 新增銷貨單 (支援 deductStock 開關，並自動計算成本與毛利：優先 avg_cost_price，其次 cost_price)
+    // 4. 新增銷貨單 (支援 deductStock 開關，並自動計算成本與毛利)
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SaleOrderDTO createSaleOrder(CreateSaleOrderDTO createDTO) {
-        if (createDTO.getCustomerId() != null && !customerRepository.existsById(createDTO.getCustomerId())) {
-            throw new RuntimeException("找不到對應的客戶 ID: " + createDTO.getCustomerId()); 
-        }
-
         SaleOrder saleOrder = new SaleOrder();
         saleOrder.setSaleNo(generateSaleNo()); 
-        saleOrder.setCustomerId(createDTO.getCustomerId()); 
+        
+        // 💡 採用 JPA 物件關聯設定 Customer
+        if (createDTO.getCustomerId() != null) {
+            Customer customer = customerRepository.findById(createDTO.getCustomerId())
+                    .orElseThrow(() -> new RuntimeException("找不到對應的客戶 ID: " + createDTO.getCustomerId()));
+            saleOrder.setCustomer(customer);
+        }
+
         saleOrder.setSaleDate(createDTO.getSaleDate() != null ? createDTO.getSaleDate() : LocalDate.now());
         saleOrder.setRemark(createDTO.getRemark()); 
         saleOrder.setDiscountAmount(createDTO.getDiscountAmount() != null ? createDTO.getDiscountAmount() : BigDecimal.ZERO);
@@ -108,19 +120,21 @@ public class SaleOrderServiceImpl implements SaleOrderService {
 
         if (createDTO.getItems() != null) {
             for (CreateSaleOrderDTO.CreateItemDTO itemDTO : createDTO.getItems()) {
+                if (itemDTO == null || itemDTO.getProductId() == null) {
+                    continue;
+                }
+                
                 Product product = productRepository.findById(itemDTO.getProductId())
                         .orElseThrow(() -> new RuntimeException("商品不存在，ID: " + itemDTO.getProductId()));
 
                 BigDecimal sellQty = itemDTO.getQuantity() != null ? itemDTO.getQuantity() : BigDecimal.ZERO;
                 
-                // 💡 只有當 deductStock 為 true 時，才進行庫存扣減
                 if (createDTO.isDeductStock()) {
                     BigDecimal currentStock = product.getStockQuantity() != null ? product.getStockQuantity() : BigDecimal.ZERO;
                     product.setStockQuantity(currentStock.subtract(sellQty));
                     productRepository.save(product);
                 }
 
-                // 建立明細項
                 SaleOrderItem orderItem = new SaleOrderItem();
                 orderItem.setProductId(product.getId()); 
                 orderItem.setProductName(product.getProductName()); 
@@ -136,7 +150,6 @@ public class SaleOrderServiceImpl implements SaleOrderService {
                 BigDecimal subtotal = unitPrice.multiply(sellQty); 
                 orderItem.setSubtotal(subtotal); 
 
-                // 💡【核心升級】智慧選取成本：優先使用 avg_cost_price，若無則退回使用 cost_price
                 BigDecimal unitCost = BigDecimal.ZERO;
                 if (product.getAvgCostPrice() != null && product.getAvgCostPrice().compareTo(BigDecimal.ZERO) > 0) {
                     unitCost = product.getAvgCostPrice();
@@ -157,7 +170,6 @@ public class SaleOrderServiceImpl implements SaleOrderService {
             }
         }
 
-        // 扣除整單折讓額
         BigDecimal finalPay = grandTotal.subtract(saleOrder.getDiscountAmount());
         saleOrder.setTotalAmount(finalPay.compareTo(BigDecimal.ZERO) > 0 ? finalPay : BigDecimal.ZERO);
 
@@ -165,35 +177,48 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         return convertToDTO(savedOrder);
     }
 
-    // 5. 修改銷貨單 (將原單據庫存先回補，再依新單據重新扣庫存與計算成本毛利)
+    // 5. 修改銷貨單
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SaleOrderDTO updateSaleOrder(Long id, CreateSaleOrderDTO updateDTO) {
+        if (id == null) {
+            throw new IllegalArgumentException("更新失敗：銷貨單 ID 不能為空！");
+        }
+        
         SaleOrder existingOrder = saleOrderRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("找不到該銷貨單，無法更新！ID: " + id));
 
-        // 步驟 A：將舊銷貨單的庫存全數加回
+        // 步驟 A：庫存回補
         if (existingOrder.getItems() != null) {
             for (SaleOrderItem oldItem : existingOrder.getItems()) {
-                Product product = productRepository.findById(oldItem.getProductId()).orElse(null);
-                if (product != null) {
-                    BigDecimal oldQty = oldItem.getQuantity() != null ? oldItem.getQuantity() : BigDecimal.ZERO;
-                    product.setStockQuantity((product.getStockQuantity() != null ? product.getStockQuantity() : BigDecimal.ZERO).add(oldQty));
-                    productRepository.save(product);
+                if (oldItem.getProductId() != null) {
+                    Product product = productRepository.findById(oldItem.getProductId()).orElse(null);
+                    if (product != null) {
+                        BigDecimal oldQty = oldItem.getQuantity() != null ? oldItem.getQuantity() : BigDecimal.ZERO;
+                        product.setStockQuantity((product.getStockQuantity() != null ? product.getStockQuantity() : BigDecimal.ZERO).add(oldQty));
+                        productRepository.save(product);
+                    }
                 }
             }
-            existingOrder.getItems().clear(); // 清空舊明細
+            existingOrder.getItems().clear();
         }
 
-        // 步驟 B：更新主檔資訊
-        existingOrder.setCustomerId(updateDTO.getCustomerId());
+        // 步驟 B：更新主檔資訊 (帶入 Customer 物件)
+        if (updateDTO.getCustomerId() != null) {
+            Customer customer = customerRepository.findById(updateDTO.getCustomerId())
+                    .orElseThrow(() -> new RuntimeException("找不到對應的客戶 ID: " + updateDTO.getCustomerId()));
+            existingOrder.setCustomer(customer);
+        } else {
+            existingOrder.setCustomer(null);
+        }
+
         if (updateDTO.getSaleDate() != null) {
             existingOrder.setSaleDate(updateDTO.getSaleDate());
         }
         existingOrder.setRemark(updateDTO.getRemark());
         existingOrder.setDiscountAmount(updateDTO.getDiscountAmount() != null ? updateDTO.getDiscountAmount() : BigDecimal.ZERO);
 
-        // 步驟 C：重新計算新明細、扣除庫存並重新計算成本毛利
+        // 步驟 C：重新扣庫存與計算明細
         BigDecimal grandTotal = BigDecimal.ZERO;
 
         if (updateDTO.getItems() != null) {
@@ -219,7 +244,6 @@ public class SaleOrderServiceImpl implements SaleOrderService {
                 BigDecimal subtotal = unitPrice.multiply(sellQty);
                 orderItem.setSubtotal(subtotal);
 
-                // 💡【核心升級】智慧選取成本：優先使用 avg_cost_price，若無則退回使用 cost_price
                 BigDecimal unitCost = BigDecimal.ZERO;
                 if (product.getAvgCostPrice() != null && product.getAvgCostPrice().compareTo(BigDecimal.ZERO) > 0) {
                     unitCost = product.getAvgCostPrice();
@@ -269,6 +293,29 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         saleOrderRepository.delete(saleOrder);
     }
 
+    // 7. 建議售價查詢 (銷售彈窗選商品時觸發)
+    @Override
+    @Transactional(readOnly = true)
+    public BigDecimal getSuggestedPrice(Long customerId, Long productId) {
+        if (productId == null) {
+            return BigDecimal.ZERO;
+        }
+
+        // 💡 對應 SaleOrderItemRepository 新的 JPQL 方法，取最新的第一筆
+        if (customerId != null) {
+            List<SaleOrderItem> recentItems = saleOrderItemRepository
+                    .findRecentPriceByCustomerAndProduct(customerId, productId, PageRequest.of(0, 1));
+
+            if (!recentItems.isEmpty() && recentItems.get(0).getUnitPrice() != null) {
+                return recentItems.get(0).getUnitPrice();
+            }
+        }
+
+        return productRepository.findById(productId)
+                .map(p -> p.getSalePrice() != null ? p.getSalePrice() : BigDecimal.ZERO)
+                .orElse(BigDecimal.ZERO);
+    }
+
     private String generateSaleNo() {
         String dateStr = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         String randomStr = UUID.randomUUID().toString().substring(0, 4).toUpperCase();
@@ -279,16 +326,16 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         SaleOrderDTO dto = new SaleOrderDTO();
         dto.setId(entity.getId());
         dto.setSaleNo(entity.getSaleNo());
-        dto.setCustomerId(entity.getCustomerId());
         dto.setSaleDate(entity.getSaleDate());
         dto.setRemark(entity.getRemark());
         dto.setDiscountAmount(entity.getDiscountAmount());
         dto.setTotalAmount(entity.getTotalAmount());
 
-        if (entity.getCustomerId() != null) {
-            customerRepository.findById(entity.getCustomerId()).ifPresent(c -> {
-                dto.setCustomerName(c.getShortName() != null ? c.getShortName() : c.getFullName());
-            });
+        if (entity.getCustomer() != null) {
+            dto.setCustomerId(entity.getCustomer().getId());
+            String custName = entity.getCustomer().getShortName() != null ? 
+                              entity.getCustomer().getShortName() : entity.getCustomer().getFullName();
+            dto.setCustomerName(custName);
         }
 
         List<SaleOrderDTO.ItemDTO> itemDTOs = new ArrayList<>();
@@ -303,7 +350,6 @@ public class SaleOrderServiceImpl implements SaleOrderService {
                 itemDTO.setUnitPrice(item.getUnitPrice());
                 itemDTO.setSubtotal(item.getSubtotal());
                 
-                // 💡 將成本與毛利資料傳遞給 DTO
                 itemDTO.setCostPrice(item.getCostPrice());
                 itemDTO.setTotalCost(item.getTotalCost());
                 itemDTO.setGrossProfit(item.getGrossProfit());

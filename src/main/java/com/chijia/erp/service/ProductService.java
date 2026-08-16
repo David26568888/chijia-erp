@@ -4,6 +4,7 @@ import java.io.InputStream;
 import java.util.List;
 
 import com.chijia.erp.model.dto.ProductDTO;
+import com.chijia.erp.model.dto.ProductHistoryDTO;
 
 
 public interface ProductService {
@@ -36,4 +37,6 @@ public interface ProductService {
 
     //10. 還原系統自身產生的 11 欄標準備份檔
 	String restoreProductsFromBackup(InputStream inputStream) throws Exception;
+
+	ProductHistoryDTO getProductHistory(Long productId);
 }

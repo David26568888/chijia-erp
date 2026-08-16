@@ -8,9 +8,12 @@ import java.util.List;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
@@ -28,8 +31,10 @@ public class SaleOrder {
     @Column(name = "sale_no", nullable = false, unique = true, length = 30)
     private String saleNo; // 銷貨單號 (例如: SO-20260813-XXXX)
 
-    @Column(name = "customer_id")
-    private Long customerId; // 客戶 ID (允許為 null 代表散客)
+    // 💡 補上：與 Customer 的物件關聯 (散客可為 null)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "customer_id")
+    private Customer customer;
 
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount = BigDecimal.ZERO; // 實收總金額

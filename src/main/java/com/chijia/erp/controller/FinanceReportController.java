@@ -19,7 +19,7 @@ import com.chijia.erp.repository.SaleOrderRepository;
 import com.chijia.erp.service.SaleOrderService;
 
 @RestController
-@RequestMapping("/api/reports")
+@RequestMapping("/api/v1/reports")
 @CrossOrigin(origins = "*") // 允許前端 React 跨域呼叫
 public class FinanceReportController {
 

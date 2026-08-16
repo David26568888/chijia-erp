@@ -20,6 +20,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.chijia.erp.api.ApiResponse;
 import com.chijia.erp.model.dto.ProductDTO;
+import com.chijia.erp.model.dto.ProductHistoryDTO;
 import com.chijia.erp.service.ProductService;
 
 @RestController
@@ -115,6 +116,12 @@ public class ProductController {
 				return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
 						.body(ApiResponse.error(500, "產品匯入失敗: " + e.getMessage()));
 			}
+		}
+		
+		@GetMapping("/{id}/history")
+		public ResponseEntity<ApiResponse<ProductHistoryDTO>> getProductHistory(@PathVariable Long id) {
+		    ProductHistoryDTO history = productService.getProductHistory(id);
+		    return ResponseEntity.ok(ApiResponse.success("商品進銷歷史紀錄查詢成功", history));
 		}
 	
 }

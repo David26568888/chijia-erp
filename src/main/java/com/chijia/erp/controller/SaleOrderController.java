@@ -1,5 +1,6 @@
 package com.chijia.erp.controller;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -78,4 +79,15 @@ public class SaleOrderController {
         saleOrderService.deleteSaleOrder(id);
         return ResponseEntity.ok(ApiResponse.success("🗑️ 銷貨單已成功作廢，商品庫存已自動回補！"));
     }
+    
+
+ // 6. 💡【取得歷史建議售價 API】(已包裝 ApiResponse 格式)[cite: 4]
+    @GetMapping("/suggest-price")
+    public ResponseEntity<ApiResponse<BigDecimal>> getSuggestedPrice(
+            @RequestParam Long customerId,
+            @RequestParam Long productId) {
+        BigDecimal price = saleOrderService.getSuggestedPrice(customerId, productId);
+        return ResponseEntity.ok(ApiResponse.success("取得歷史建議售價成功", price));
+    }
+  
 }

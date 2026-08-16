@@ -1,5 +1,6 @@
 package com.chijia.erp.service;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -24,4 +25,7 @@ public interface SaleOrderService {
 
     // 💡 6. 核心作廢功能：刪除/作廢銷貨單 (並自動將商品庫存加回)
     void deleteSaleOrder(Long id);
+    
+ // 💡【新增】查詢建議售價 (歷史價格記憶)
+    BigDecimal getSuggestedPrice(Long customerId, Long productId);
 }
