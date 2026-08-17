@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Pageable;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -98,37 +100,44 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         return convertToDTO(saleOrder);
     }
 
-    // 4. 新增銷貨單 (支援 deductStock 開關，並自動計算成本與毛利)
+ // 4. 新增銷貨單 (支援 deductStock 開關，自動帶入歷史成交價並計算主表成本與毛利)
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SaleOrderDTO createSaleOrder(CreateSaleOrderDTO createDTO) {
         SaleOrder saleOrder = new SaleOrder();
-        saleOrder.setSaleNo(generateSaleNo()); 
-        
-        // 💡 採用 JPA 物件關聯設定 Customer
+
+        // 1. 綁定客戶
         if (createDTO.getCustomerId() != null) {
             Customer customer = customerRepository.findById(createDTO.getCustomerId())
                     .orElseThrow(() -> new RuntimeException("找不到對應的客戶 ID: " + createDTO.getCustomerId()));
             saleOrder.setCustomer(customer);
         }
 
+        saleOrder.setSaleNo(generateSaleNo());
         saleOrder.setSaleDate(createDTO.getSaleDate() != null ? createDTO.getSaleDate() : LocalDate.now());
-        saleOrder.setRemark(createDTO.getRemark()); 
-        saleOrder.setDiscountAmount(createDTO.getDiscountAmount() != null ? createDTO.getDiscountAmount() : BigDecimal.ZERO);
+        saleOrder.setRemark(createDTO.getRemark());
 
-        BigDecimal grandTotal = BigDecimal.ZERO;
+        BigDecimal discountAmount = createDTO.getDiscountAmount() != null ? createDTO.getDiscountAmount() : BigDecimal.ZERO;
+        saleOrder.setDiscountAmount(discountAmount);
 
-        if (createDTO.getItems() != null) {
+        BigDecimal grandTotal = BigDecimal.ZERO;     // 全單未折扣總金額
+        BigDecimal orderTotalCost = BigDecimal.ZERO; // 全單總成本
+
+        if (createDTO.getItems() != null && !createDTO.getItems().isEmpty()) {
             for (CreateSaleOrderDTO.CreateItemDTO itemDTO : createDTO.getItems()) {
                 if (itemDTO == null || itemDTO.getProductId() == null) {
                     continue;
                 }
-                
+
                 Product product = productRepository.findById(itemDTO.getProductId())
                         .orElseThrow(() -> new RuntimeException("商品不存在，ID: " + itemDTO.getProductId()));
 
                 BigDecimal sellQty = itemDTO.getQuantity() != null ? itemDTO.getQuantity() : BigDecimal.ZERO;
-                
+                if (sellQty.compareTo(BigDecimal.ZERO) <= 0) {
+                    continue; // 忽略數量 <= 0 的明細
+                }
+
+                // 2. 扣減庫存 logic
                 if (createDTO.isDeductStock()) {
                     BigDecimal currentStock = product.getStockQuantity() != null ? product.getStockQuantity() : BigDecimal.ZERO;
                     product.setStockQuantity(currentStock.subtract(sellQty));
@@ -136,48 +145,65 @@ public class SaleOrderServiceImpl implements SaleOrderService {
                 }
 
                 SaleOrderItem orderItem = new SaleOrderItem();
-                orderItem.setProductId(product.getId()); 
-                orderItem.setProductName(product.getProductName()); 
+                // 💡 寫入關鍵 ID 與快照，避免外鍵遺失
+                orderItem.setProductId(product.getId());
                 orderItem.setProductCode(product.getProductCode());
-                orderItem.setQuantity(sellQty); 
+                orderItem.setProductName(product.getProductName());
+                orderItem.setQuantity(sellQty);
 
+                // 3. 確定銷售單價：前端指定單價 -> 客戶歷史成交價 -> 商品預設售價
                 BigDecimal unitPrice = itemDTO.getUnitPrice();
                 if (unitPrice == null) {
-                    unitPrice = product.getSalePrice() != null ? product.getSalePrice() : BigDecimal.ZERO;
+                    unitPrice = resolveProductUnitPrice(createDTO.getCustomerId(), product);
                 }
-                orderItem.setUnitPrice(unitPrice); 
+                orderItem.setUnitPrice(unitPrice);
 
-                BigDecimal subtotal = unitPrice.multiply(sellQty); 
-                orderItem.setSubtotal(subtotal); 
+                // 4. 計算項目小計
+                BigDecimal subtotal = unitPrice.multiply(sellQty);
+                orderItem.setSubtotal(subtotal);
 
+                // 5. 成本與毛利計算 (優先使用平均成本，其次使用進價)
                 BigDecimal unitCost = BigDecimal.ZERO;
                 if (product.getAvgCostPrice() != null && product.getAvgCostPrice().compareTo(BigDecimal.ZERO) > 0) {
                     unitCost = product.getAvgCostPrice();
                 } else if (product.getCostPrice() != null) {
                     unitCost = product.getCostPrice();
                 }
-                
+
                 orderItem.setCostPrice(unitCost);
-                
+
                 BigDecimal totalCost = unitCost.multiply(sellQty);
                 orderItem.setTotalCost(totalCost);
 
-                BigDecimal profit = subtotal.subtract(totalCost);
-                orderItem.setGrossProfit(profit);
+                BigDecimal itemProfit = subtotal.subtract(totalCost);
+                orderItem.setGrossProfit(itemProfit);
 
-                grandTotal = grandTotal.add(subtotal); 
+                // 累加全單數值
+                grandTotal = grandTotal.add(subtotal);
+                orderTotalCost = orderTotalCost.add(totalCost);
+
+                // 6. 雙向關聯綁定 (addItem 內部應自動做 orderItem.setSaleOrder(this))
                 saleOrder.addItem(orderItem);
             }
         }
 
-        BigDecimal finalPay = grandTotal.subtract(saleOrder.getDiscountAmount());
+        // 7. 計算主表應收總額與整單總毛利
+        BigDecimal finalPay = grandTotal.subtract(discountAmount);
         saleOrder.setTotalAmount(finalPay.compareTo(BigDecimal.ZERO) > 0 ? finalPay : BigDecimal.ZERO);
+        saleOrder.setTotalCost(orderTotalCost);
+
+        // 主表整單毛利 = 最終應收金額 - 總成本 (自動扣除折讓)
+        BigDecimal orderGrossProfit = saleOrder.getTotalAmount().subtract(orderTotalCost);
+        saleOrder.setGrossProfit(orderGrossProfit);
 
         SaleOrder savedOrder = saleOrderRepository.save(saleOrder);
         return convertToDTO(savedOrder);
     }
 
-    // 5. 修改銷貨單
+    
+ 
+
+	// 5. 修改銷貨單
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SaleOrderDTO updateSaleOrder(Long id, CreateSaleOrderDTO updateDTO) {
@@ -359,5 +385,21 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         }
         dto.setItems(itemDTOs);
         return dto;
+        
+    } 
+    /**
+     * 💡 私有輔助方法：解析商品銷售單價
+     */
+    
+    private BigDecimal resolveProductUnitPrice(Long customerId, Product product) {
+    	if (customerId != null) {
+            Pageable pageable = PageRequest.of(0, 1);
+            List<SaleOrderItem> historyItems = saleOrderItemRepository
+                    .findRecentPriceByCustomerAndProduct(customerId, product.getId(), pageable);
+            if (!historyItems.isEmpty() && historyItems.get(0).getUnitPrice() != null) {
+                return historyItems.get(0).getUnitPrice();
+            }
+        }
+        return product.getSalePrice() != null ? product.getSalePrice() : BigDecimal.ZERO;
     }
 }

@@ -21,12 +21,17 @@ import org.springframework.web.multipart.MultipartFile;
 import com.chijia.erp.api.ApiResponse;
 import com.chijia.erp.model.dto.ProductDTO;
 import com.chijia.erp.model.dto.ProductHistoryDTO;
+import com.chijia.erp.model.dto.ProductHistoryDTO.PurchaseRecordDTO;
+import com.chijia.erp.model.dto.ProductHistoryDTO.SaleRecordDTO;
+import com.chijia.erp.service.ProductHistoryService;
 import com.chijia.erp.service.ProductService;
 
 @RestController
 @RequestMapping("/api/v1/products")
-@CrossOrigin(origins = "*")// 允許前端 React 跨域存取 (實務上 React 通常跑在 3000 埠)
 public class ProductController {
+	
+	@Autowired
+    private ProductHistoryService productHistoryService;
 	
 	@Autowired
 	private ProductService productService;
@@ -118,10 +123,36 @@ public class ProductController {
 			}
 		}
 		
-		@GetMapping("/{id}/history")
-		public ResponseEntity<ApiResponse<ProductHistoryDTO>> getProductHistory(@PathVariable Long id) {
-		    ProductHistoryDTO history = productService.getProductHistory(id);
-		    return ResponseEntity.ok(ApiResponse.success("商品進銷歷史紀錄查詢成功", history));
-		}
+
+		//從ProductHistoryController合併過來
+		/**
+	     * 1. 取得特定商品的歷史銷售紀錄 (供前端銷貨彈窗呼叫)
+	     * GET /api/v1/products/{productId}/sales-history
+	     */
+	    @GetMapping("/{productId}/sales-history")
+	    public ResponseEntity<List<SaleRecordDTO>> getSalesHistory(@PathVariable Long productId) {
+	        ProductHistoryDTO history = productHistoryService.getProductHistory(productId);
+	        return ResponseEntity.ok(history.getSaleHistory());
+	    }
+
+	    /**
+	     * 2. 取得特定商品的歷史進貨紀錄 (供前端銷貨彈窗呼叫)
+	     * GET /api/v1/products/{productId}/purchase-history
+	     */
+	    @GetMapping("/{productId}/purchase-history")
+	    public ResponseEntity<List<PurchaseRecordDTO>> getPurchaseHistory(@PathVariable Long productId) {
+	        ProductHistoryDTO history = productHistoryService.getProductHistory(productId);
+	        return ResponseEntity.ok(history.getPurchaseHistory());
+	    }
+
+	    /**
+	     * 3. 一次取得進銷貨完整歷史紀錄
+	     * GET /api/v1/products/{productId}/history
+	     */
+	    @GetMapping("/{productId}/history")
+	    public ResponseEntity<ProductHistoryDTO> getProductHistory(@PathVariable Long productId) {
+	        ProductHistoryDTO history = productHistoryService.getProductHistory(productId);
+	        return ResponseEntity.ok(history);
+	    }
 	
 }

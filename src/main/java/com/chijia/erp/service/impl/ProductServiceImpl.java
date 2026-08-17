@@ -271,7 +271,7 @@ public class ProductServiceImpl implements ProductService {
         // 取最新的前 20 筆歷史紀錄
         PageRequest pageRequest = PageRequest.of(0, 20);
 
-        // 💡 1. 撈取進貨歷史 (傳入變數 productId 與 pageRequest，非型態名稱)
+        // 💡 1. 撈取進貨歷史
         List<ProductHistoryDTO.PurchaseRecordDTO> purchaseHistory = purchaseOrderItemRepository
                 .findRecentHistoryByProductId(productId, pageRequest)
                 .stream()
@@ -283,9 +283,10 @@ public class ProductServiceImpl implements ProductService {
                                 ? supplier.getShortName() 
                                 : supplier.getFullName();
                     }
+                    // 修正：調整參數順序，第 1 個傳 Date，第 2 個傳 supplierName
                     return new ProductHistoryDTO.PurchaseRecordDTO(
-                            supplierName,
                             item.getPurchaseOrder() != null ? item.getPurchaseOrder().getPurchaseDate() : null,
+                            supplierName,
                             item.getUnitPrice(),
                             item.getQuantity()
                     );
@@ -304,9 +305,10 @@ public class ProductServiceImpl implements ProductService {
                                 ? customer.getShortName() 
                                 : customer.getFullName();
                     }
+                    // 修正：傳參順序與 SaleRecordDTO(LocalDate, String, BigDecimal, BigDecimal) 對齊
                     return new ProductHistoryDTO.SaleRecordDTO(
-                            customerName,
                             item.getSaleOrder() != null ? item.getSaleOrder().getSaleDate() : null,
+                            customerName,
                             item.getUnitPrice(),
                             item.getQuantity()
                     );

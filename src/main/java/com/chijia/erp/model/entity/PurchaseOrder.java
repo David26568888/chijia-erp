@@ -17,9 +17,11 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
-@Data
+@Getter
+@Setter
 @Entity
 @Table(name = "purchase_order")
 public class PurchaseOrder {
@@ -29,26 +31,23 @@ public class PurchaseOrder {
     private Long id;
 
     @Column(name = "purchase_no", nullable = false, unique = true, length = 30)
-    private String purchaseNo; // 進貨單號 (例如: PO-20260813-XXXX)
+    private String purchaseNo; // 進貨單號
 
-    @Column(name = "supplier_id",insertable = false, updatable = false)
-    private Long supplierId; // 廠商 ID
-    
- // 💡 補上：與 Supplier 的物件關聯
+    // 💡 JPA 由物件關聯外鍵維護 supplier_id
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "supplier_id")
+    @JoinColumn(name = "supplier_id", nullable = false)
     private Supplier supplier;
 
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
-    private BigDecimal totalAmount = BigDecimal.ZERO; // 進貨總金額
+    private BigDecimal totalAmount = BigDecimal.ZERO;
 
     @Column(name = "discount_amount", precision = 12, scale = 2)
-    private BigDecimal discountAmount = BigDecimal.ZERO; // 整單折讓/折扣金額
+    private BigDecimal discountAmount = BigDecimal.ZERO;
 
     @Column(name = "purchase_date", nullable = false)
-    private LocalDate purchaseDate; // 進貨日期
+    private LocalDate purchaseDate;
 
-    private String remark; // 進貨備註
+    private String remark;
 
     @OneToMany(mappedBy = "purchaseOrder", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<PurchaseOrderItem> items = new ArrayList<>();

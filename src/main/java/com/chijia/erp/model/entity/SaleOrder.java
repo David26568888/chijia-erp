@@ -49,6 +49,12 @@ public class SaleOrder {
 
     @OneToMany(mappedBy = "saleOrder", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<SaleOrderItem> items = new ArrayList<>();
+    
+    @Column(name = "total_cost", precision = 12, scale = 2)
+    private BigDecimal totalCost = BigDecimal.ZERO; // 全單總成本
+
+    @Column(name = "gross_profit", precision = 12, scale = 2)
+    private BigDecimal grossProfit = BigDecimal.ZERO; // 全單總毛利
 
     public void addItem(SaleOrderItem item) {
         items.add(item);

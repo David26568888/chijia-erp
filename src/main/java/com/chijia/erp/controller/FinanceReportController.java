@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -15,22 +16,26 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.chijia.erp.model.dto.SaleOrderDTO;
+import com.chijia.erp.model.entity.SaleOrderItem;
+import com.chijia.erp.repository.SaleOrderItemRepository;
 import com.chijia.erp.repository.SaleOrderRepository;
 import com.chijia.erp.service.SaleOrderService;
 
 @RestController
 @RequestMapping("/api/v1/reports")
-@CrossOrigin(origins = "*") // 允許前端 React 跨域呼叫
 public class FinanceReportController {
 
     @Autowired
     private SaleOrderRepository saleOrderRepository;
+    
+    @Autowired
+    private SaleOrderItemRepository saleOrderItemRepository;
 
     @Autowired
     private SaleOrderService saleOrderService;
 
     // 1. 查詢單一訂單賺多少錢 (訂單毛利分析)
-    // GET /api/reports/order/{id}/profit
+    // GET /api/v1/reports/order/{id}/profit
     @GetMapping("/order/{id}/profit")
     public ResponseEntity<Map<String, Object>> getOrderProfit(@PathVariable Long id) {
         SaleOrderDTO order = saleOrderService.getSaleOrderById(id);
@@ -77,19 +82,19 @@ public class FinanceReportController {
         return ResponseEntity.ok(result);
     }
 
-    // 3. 查詢最賺錢商品排行榜
-    // GET /api/reports/top-products
+    // 3. 查詢最賺錢商品排行榜 並取前 100 名
+    // GET /api/v1/reports/top-products
     @GetMapping("/top-products")
     public ResponseEntity<List<Object[]>> getTopProfitableProducts() {
-        List<Object[]> topProducts = saleOrderRepository.findTopProfitableProducts();
+        List<Object[]> topProducts = saleOrderItemRepository.findTopProfitableProducts(PageRequest.of(0, 100));
         return ResponseEntity.ok(topProducts);
     }
 
-    // 4. 查詢賣得最多的商品排行榜
-    // GET /api/reports/best-sellers
+    // 4. 查詢賣得最多的商品排行榜  並取前 100 名
+    // GET /api/v1/reports/best-sellers
     @GetMapping("/best-sellers")
     public ResponseEntity<List<Object[]>> getBestSellingProducts() {
-        List<Object[]> bestSellers = saleOrderRepository.findTopSellingProducts();
+        List<Object[]> bestSellers = saleOrderItemRepository.findTopSellingProducts(PageRequest.of(0, 100));
         return ResponseEntity.ok(bestSellers);
     }
 }

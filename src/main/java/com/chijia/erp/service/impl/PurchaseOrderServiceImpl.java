@@ -37,7 +37,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     @Autowired
     private SupplierRepository supplierRepository;
 
-    // 1. 查詢所有進貨單 (依 ID 倒序，最新開單的排最前面)
+    // 1. 查詢所有進貨單 (依 ID 倒序)
     @Override
     public List<PurchaseOrderDTO> getAllPurchaseOrders() {
         return purchaseOrderRepository.findAll().stream()
@@ -58,11 +58,8 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                         String kw = keyword.trim().toLowerCase();
                         boolean matchNo = o.getPurchaseNo() != null && o.getPurchaseNo().toLowerCase().contains(kw);
                         
-                        String suppName = "";
-                        if (o.getSupplierId() != null) {
-                            suppName = supplierRepository.findById(o.getSupplierId())
-                                    .map(Supplier::getShortName).orElse("");
-                        }
+                        String suppName = (o.getSupplier() != null && o.getSupplier().getShortName() != null)
+                                ? o.getSupplier().getShortName() : "";
                         boolean matchSupp = suppName.toLowerCase().contains(kw);
                         matchKw = matchNo || matchSupp;
                     }
@@ -82,27 +79,26 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                 .collect(Collectors.toList());
     }
 
-    // 3. 依 ID 查詢進貨單[cite: 16]
+    // 3. 依 ID 查詢進貨單
     @Override
     public PurchaseOrderDTO getPurchaseOrderById(Long id) {
         PurchaseOrder purchaseOrder = purchaseOrderRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("找不到進貨單，ID: " + id)); //[cite: 16]
+                .orElseThrow(() -> new RuntimeException("找不到進貨單，ID: " + id));
         return convertToDTO(purchaseOrder);
     }
 
-    // 4. 新增進貨單 (增加庫存 + 更新最後進價與移動平均成本)[cite: 16]
+    // 4. 新增進貨單 (裝配 Supplier & Product 物件 + 增加庫存 + 更新三軌成本)
     @Override
-    @Transactional(rollbackFor = Exception.class) //[cite: 16]
+    @Transactional(rollbackFor = Exception.class)
     public PurchaseOrderDTO createPurchaseOrder(CreatePurchaseOrderDTO createDTO) {
-        if (createDTO.getSupplierId() != null && !supplierRepository.existsById(createDTO.getSupplierId())) {
-            throw new RuntimeException("找不到對應的廠商 ID: " + createDTO.getSupplierId()); //[cite: 16]
-        }
+        Supplier supplier = supplierRepository.findById(createDTO.getSupplierId())
+                .orElseThrow(() -> new RuntimeException("找不到對應的廠商 ID: " + createDTO.getSupplierId()));
 
         PurchaseOrder purchaseOrder = new PurchaseOrder();
-        purchaseOrder.setPurchaseNo(generatePurchaseNo()); //[cite: 16]
-        purchaseOrder.setSupplierId(createDTO.getSupplierId()); //[cite: 16]
+        purchaseOrder.setPurchaseNo(generatePurchaseNo());
+        purchaseOrder.setSupplier(supplier); // 💡 正確設置 Supplier 物件關聯
         purchaseOrder.setPurchaseDate(createDTO.getPurchaseDate() != null ? createDTO.getPurchaseDate() : LocalDate.now());
-        purchaseOrder.setRemark(createDTO.getRemark()); //[cite: 16]
+        purchaseOrder.setRemark(createDTO.getRemark());
         purchaseOrder.setDiscountAmount(createDTO.getDiscountAmount() != null ? createDTO.getDiscountAmount() : BigDecimal.ZERO);
 
         BigDecimal grandTotal = BigDecimal.ZERO;
@@ -110,22 +106,22 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         if (createDTO.getItems() != null) {
             for (CreatePurchaseOrderDTO.CreateItemDTO itemDTO : createDTO.getItems()) {
                 Product product = productRepository.findById(itemDTO.getProductId())
-                        .orElseThrow(() -> new RuntimeException("商品不存在，ID: " + itemDTO.getProductId())); //[cite: 16]
+                        .orElseThrow(() -> new RuntimeException("商品不存在，ID: " + itemDTO.getProductId()));
 
-                BigDecimal inQty = itemDTO.getQuantity() != null ? itemDTO.getQuantity() : BigDecimal.ZERO; //[cite: 16]
-                BigDecimal currentStock = product.getStockQuantity() != null ? product.getStockQuantity() : BigDecimal.ZERO; //[cite: 16]
+                BigDecimal inQty = itemDTO.getQuantity() != null ? itemDTO.getQuantity() : BigDecimal.ZERO;
+                BigDecimal currentStock = product.getStockQuantity() != null ? product.getStockQuantity() : BigDecimal.ZERO;
 
                 // 決定進貨單價
-                BigDecimal unitPrice = itemDTO.getUnitPrice(); //[cite: 16]
+                BigDecimal unitPrice = itemDTO.getUnitPrice();
                 if (unitPrice == null) {
-                    unitPrice = product.getCostPrice() != null ? product.getCostPrice() : BigDecimal.ZERO; //[cite: 16]
+                    unitPrice = product.getCostPrice() != null ? product.getCostPrice() : BigDecimal.ZERO;
                 }
 
                 // 💡 三軌成本自動計算與更新：
                 // 1) 更新最後進價 (lastCostPrice)
                 product.setLastCostPrice(unitPrice);
 
-                // 2) 計算加權移動平均成本: (舊庫存 * 舊平均成本 + 新進貨量 * 新單價) / (舊庫存 + 新進貨量)
+                // 2) 計算加權移動平均成本
                 BigDecimal oldAvgCost = product.getAvgCostPrice() != null ? product.getAvgCostPrice() : (product.getCostPrice() != null ? product.getCostPrice() : BigDecimal.ZERO);
                 BigDecimal oldTotalVal = currentStock.multiply(oldAvgCost);
                 BigDecimal newInVal = inQty.multiply(unitPrice);
@@ -136,34 +132,34 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                     product.setAvgCostPrice(newAvgCost);
                 }
 
-                // 3) 自動增加庫存[cite: 16]
+                // 3) 自動增加庫存
                 product.setStockQuantity(newTotalQty);
-                productRepository.save(product); //[cite: 16]
+                productRepository.save(product);
 
-                // 建立明細項[cite: 16]
+                // 建立明細項
                 PurchaseOrderItem orderItem = new PurchaseOrderItem();
-                orderItem.setProductId(product.getId()); //[cite: 16]
-                orderItem.setProductName(product.getProductName()); //[cite: 16]
+                orderItem.setProduct(product); // 💡 正確設置 Product 物件關聯
+                orderItem.setProductName(product.getProductName());
                 orderItem.setProductCode(product.getProductCode());
-                orderItem.setQuantity(inQty); //[cite: 16]
-                orderItem.setUnitPrice(unitPrice); //[cite: 16]
+                orderItem.setQuantity(inQty);
+                orderItem.setUnitPrice(unitPrice);
 
-                BigDecimal subtotal = unitPrice.multiply(inQty); //[cite: 16]
-                orderItem.setSubtotal(subtotal); //[cite: 16]
+                BigDecimal subtotal = unitPrice.multiply(inQty);
+                orderItem.setSubtotal(subtotal);
 
-                grandTotal = grandTotal.add(subtotal); //[cite: 16]
-                purchaseOrder.addItem(orderItem); //[cite: 16]
+                grandTotal = grandTotal.add(subtotal);
+                purchaseOrder.addItem(orderItem);
             }
         }
 
         BigDecimal finalTotal = grandTotal.subtract(purchaseOrder.getDiscountAmount());
         purchaseOrder.setTotalAmount(finalTotal.compareTo(BigDecimal.ZERO) > 0 ? finalTotal : BigDecimal.ZERO);
 
-        PurchaseOrder savedOrder = purchaseOrderRepository.save(purchaseOrder); //[cite: 16]
+        PurchaseOrder savedOrder = purchaseOrderRepository.save(purchaseOrder);
         return convertToDTO(savedOrder);
     }
 
-    // 5. 修改進貨單 (先扣回舊數量，再加回新數量)
+    // 5. 修改進貨單 (校正庫存與關聯)
     @Override
     @Transactional(rollbackFor = Exception.class)
     public PurchaseOrderDTO updatePurchaseOrder(Long id, CreatePurchaseOrderDTO updateDTO) {
@@ -173,18 +169,22 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         // 步驟 A：將舊進貨單增加的庫存扣回
         if (existingOrder.getItems() != null) {
             for (PurchaseOrderItem oldItem : existingOrder.getItems()) {
-                Product product = productRepository.findById(oldItem.getProductId()).orElse(null);
-                if (product != null) {
+                if (oldItem.getProduct() != null) {
+                    Product product = oldItem.getProduct();
                     BigDecimal oldQty = oldItem.getQuantity() != null ? oldItem.getQuantity() : BigDecimal.ZERO;
-                    product.setStockQuantity((product.getStockQuantity() != null ? product.getStockQuantity() : BigDecimal.ZERO).subtract(oldQty));
+                    BigDecimal currentStock = product.getStockQuantity() != null ? product.getStockQuantity() : BigDecimal.ZERO;
+                    product.setStockQuantity(currentStock.subtract(oldQty));
                     productRepository.save(product);
                 }
             }
             existingOrder.getItems().clear();
         }
 
-        // 步驟 B：更新主檔資訊
-        existingOrder.setSupplierId(updateDTO.getSupplierId());
+        // 步驟 B：更新 Supplier 與主檔資訊
+        Supplier supplier = supplierRepository.findById(updateDTO.getSupplierId())
+                .orElseThrow(() -> new RuntimeException("找不到對應的廠商 ID: " + updateDTO.getSupplierId()));
+        existingOrder.setSupplier(supplier);
+
         if (updateDTO.getPurchaseDate() != null) {
             existingOrder.setPurchaseDate(updateDTO.getPurchaseDate());
         }
@@ -201,7 +201,6 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
 
                 BigDecimal inQty = itemDTO.getQuantity() != null ? itemDTO.getQuantity() : BigDecimal.ZERO;
                 BigDecimal currentStock = product.getStockQuantity() != null ? product.getStockQuantity() : BigDecimal.ZERO;
-
                 BigDecimal unitPrice = itemDTO.getUnitPrice() != null ? itemDTO.getUnitPrice() : (product.getCostPrice() != null ? product.getCostPrice() : BigDecimal.ZERO);
 
                 product.setLastCostPrice(unitPrice);
@@ -209,7 +208,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                 productRepository.save(product);
 
                 PurchaseOrderItem orderItem = new PurchaseOrderItem();
-                orderItem.setProductId(product.getId());
+                orderItem.setProduct(product);
                 orderItem.setProductName(product.getProductName());
                 orderItem.setProductCode(product.getProductCode());
                 orderItem.setQuantity(inQty);
@@ -230,7 +229,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         return convertToDTO(updatedOrder);
     }
 
-    // 6. 作廢/刪除進貨單 (庫存自動扣回)
+    // 6. 作廢/刪除進貨單 (自動將庫存扣回)
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deletePurchaseOrder(Long id) {
@@ -239,11 +238,11 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
 
         if (purchaseOrder.getItems() != null) {
             for (PurchaseOrderItem item : purchaseOrder.getItems()) {
-                Product product = productRepository.findById(item.getProductId()).orElse(null);
-                if (product != null) {
+                if (item.getProduct() != null) {
+                    Product product = item.getProduct();
                     BigDecimal currentStock = product.getStockQuantity() != null ? product.getStockQuantity() : BigDecimal.ZERO;
                     BigDecimal itemQty = item.getQuantity() != null ? item.getQuantity() : BigDecimal.ZERO;
-                    product.setStockQuantity(currentStock.subtract(itemQty)); // 把當初增加的扣回
+                    product.setStockQuantity(currentStock.subtract(itemQty));
                     productRepository.save(product);
                 }
             }
@@ -253,42 +252,44 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     }
 
     private String generatePurchaseNo() {
-        String dateStr = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")); //[cite: 16]
-        String randomStr = UUID.randomUUID().toString().substring(0, 4).toUpperCase(); //[cite: 16]
-        return "PO-" + dateStr + "-" + randomStr; //[cite: 16]
+        String dateStr = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        String randomStr = UUID.randomUUID().toString().substring(0, 4).toUpperCase();
+        return "PO-" + dateStr + "-" + randomStr;
     }
 
+    // DTO 轉化封裝
     private PurchaseOrderDTO convertToDTO(PurchaseOrder entity) {
-        PurchaseOrderDTO dto = new PurchaseOrderDTO(); //[cite: 16]
-        dto.setId(entity.getId()); //[cite: 16]
-        dto.setPurchaseNo(entity.getPurchaseNo()); //[cite: 16]
-        dto.setSupplierId(entity.getSupplierId()); //[cite: 16]
-        dto.setPurchaseDate(entity.getPurchaseDate()); //[cite: 16]
-        dto.setRemark(entity.getRemark()); //[cite: 16]
-        dto.setDiscountAmount(entity.getDiscountAmount());
-        dto.setTotalAmount(entity.getTotalAmount()); //[cite: 16]
-
-        if (entity.getSupplierId() != null) {
-            supplierRepository.findById(entity.getSupplierId()).ifPresent(s -> {
-                dto.setSupplierName(s.getShortName() != null ? s.getShortName() : s.getFullName());
-            });
+        PurchaseOrderDTO dto = new PurchaseOrderDTO();
+        dto.setId(entity.getId());
+        dto.setPurchaseNo(entity.getPurchaseNo());
+        
+        if (entity.getSupplier() != null) {
+            dto.setSupplierId(entity.getSupplier().getId());
+            dto.setSupplierName(entity.getSupplier().getShortName() != null ? entity.getSupplier().getShortName() : entity.getSupplier().getFullName());
         }
+        
+        dto.setPurchaseDate(entity.getPurchaseDate());
+        dto.setRemark(entity.getRemark());
+        dto.setDiscountAmount(entity.getDiscountAmount());
+        dto.setTotalAmount(entity.getTotalAmount());
 
-        List<PurchaseOrderDTO.ItemDTO> itemDTOs = new ArrayList<>(); //[cite: 16]
-        if (entity.getItems() != null) { //[cite: 16]
-            for (PurchaseOrderItem item : entity.getItems()) { //[cite: 16]
-                PurchaseOrderDTO.ItemDTO itemDTO = new PurchaseOrderDTO.ItemDTO(); //[cite: 16]
-                itemDTO.setId(item.getId()); //[cite: 16]
-                itemDTO.setProductId(item.getProductId()); //[cite: 16]
-                itemDTO.setProductName(item.getProductName()); //[cite: 16]
+        List<PurchaseOrderDTO.ItemDTO> itemDTOs = new ArrayList<>();
+        if (entity.getItems() != null) {
+            for (PurchaseOrderItem item : entity.getItems()) {
+                PurchaseOrderDTO.ItemDTO itemDTO = new PurchaseOrderDTO.ItemDTO();
+                itemDTO.setId(item.getId());
+                if (item.getProduct() != null) {
+                    itemDTO.setProductId(item.getProduct().getId());
+                }
+                itemDTO.setProductName(item.getProductName());
                 itemDTO.setProductCode(item.getProductCode());
-                itemDTO.setQuantity(item.getQuantity()); //[cite: 16]
-                itemDTO.setUnitPrice(item.getUnitPrice()); //[cite: 16]
-                itemDTO.setSubtotal(item.getSubtotal()); //[cite: 16]
-                itemDTOs.add(itemDTO); //[cite: 16]
+                itemDTO.setQuantity(item.getQuantity());
+                itemDTO.setUnitPrice(item.getUnitPrice());
+                itemDTO.setSubtotal(item.getSubtotal());
+                itemDTOs.add(itemDTO);
             }
         }
-        dto.setItems(itemDTOs); //[cite: 16]
-        return dto; //[cite: 16]
+        dto.setItems(itemDTOs);
+        return dto;
     }
 }

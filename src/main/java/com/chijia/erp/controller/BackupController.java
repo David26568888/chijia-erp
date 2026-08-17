@@ -17,7 +17,6 @@ import com.chijia.erp.util.ExcelBackupUtil;
 
 @RestController
 @RequestMapping("/api/v1/backup")
-@CrossOrigin(origins = "http://localhost:5173", allowCredentials = "true")
 public class BackupController {
 
     @Autowired

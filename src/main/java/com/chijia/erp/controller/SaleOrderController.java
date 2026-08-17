@@ -28,7 +28,6 @@ import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/v1/sale-orders")
-@CrossOrigin(origins = "*") //
 public class SaleOrderController {
 
     @Autowired
@@ -81,7 +80,7 @@ public class SaleOrderController {
     }
     
 
- // 6. 💡【取得歷史建議售價 API】(已包裝 ApiResponse 格式)[cite: 4]
+ // 6. 💡【取得歷史建議售價 API】(已包裝 ApiResponse 格式)
     @GetMapping("/suggest-price")
     public ResponseEntity<ApiResponse<BigDecimal>> getSuggestedPrice(
             @RequestParam Long customerId,

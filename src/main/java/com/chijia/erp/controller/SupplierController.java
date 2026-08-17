@@ -24,7 +24,6 @@ import com.chijia.erp.service.SupplierService;
 
 @RestController
 @RequestMapping("/api/v1/suppliers")
-@CrossOrigin(origins = "*")// 允許前端 React 跨域存取 (實務上 React 通常跑在 3000 埠)
 public class SupplierController {
 	
 	@Autowired

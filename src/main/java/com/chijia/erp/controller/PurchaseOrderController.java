@@ -27,7 +27,6 @@ import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/v1/purchase-orders")
-@CrossOrigin(origins = "*") //[cite: 14]
 public class PurchaseOrderController {
 
     @Autowired

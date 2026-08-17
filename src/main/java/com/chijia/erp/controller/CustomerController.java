@@ -25,7 +25,6 @@ import com.chijia.erp.service.CustomerService;
 
 @RestController
 @RequestMapping("/api/v1/customers")
-@CrossOrigin(origins = "*")
 public class CustomerController {
 
 	@Autowired

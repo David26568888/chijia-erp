@@ -26,13 +26,9 @@ public class SaleOrderItem {
     @JoinColumn(name = "sale_order_id", nullable = false)
     private SaleOrder saleOrder;
 
-    @Column(name = "product_id", insertable = false, updatable = false)
-    private Long productId; // 商品 ID
-    
-    // 💡 補上：與 Product 的物件關聯
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "product_id", nullable = false)
-    private Product product;
+ // 💡 修正 1：明確指定 product_id 為一般外鍵欄位，允許寫入與更新
+    @Column(name = "product_id", nullable = false)
+    private Long productId;
 
     @Column(name = "product_code")
     private String productCode; // 💡 備份商品編號 (例如: 0-0000)
