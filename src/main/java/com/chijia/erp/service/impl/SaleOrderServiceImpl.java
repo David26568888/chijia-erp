@@ -1,20 +1,36 @@
 package com.chijia.erp.service.impl;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Pageable;
-
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.IndexedColors;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.chijia.erp.model.dto.CreateSaleOrderDTO;
 import com.chijia.erp.model.dto.SaleOrderDTO;
@@ -27,6 +43,7 @@ import com.chijia.erp.repository.ProductRepository;
 import com.chijia.erp.repository.SaleOrderItemRepository;
 import com.chijia.erp.repository.SaleOrderRepository;
 import com.chijia.erp.service.SaleOrderService;
+import com.chijia.erp.util.ExcelHelper;
 
 @Service
 public class SaleOrderServiceImpl implements SaleOrderService {
@@ -387,6 +404,8 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         return dto;
         
     } 
+    
+    
     /**
      * 💡 私有輔助方法：解析商品銷售單價
      */
@@ -402,4 +421,145 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         }
         return product.getSalePrice() != null ? product.getSalePrice() : BigDecimal.ZERO;
     }
+
+ // --- 匯入 Excel ---
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public String importSaleOrdersFromExcel(MultipartFile file, boolean deductStock) {
+        try (InputStream is = file.getInputStream();
+             Workbook workbook = WorkbookFactory.create(is)) {
+
+            Sheet sheet = workbook.getSheetAt(0);
+            Map<String, CreateSaleOrderDTO> orderMap = new LinkedHashMap<>();
+
+            Map<String, Product> productCodeMap = new HashMap<>();
+            productRepository.findAll().forEach(p -> {
+                if (p.getProductCode() != null) productCodeMap.put(p.getProductCode().trim(), p);
+            });
+
+            Map<String, Customer> customerCodeMap = new HashMap<>();
+            customerRepository.findAll().forEach(c -> {
+                if (c.getCustomerCode() != null) customerCodeMap.put(c.getCustomerCode().trim(), c);
+            });
+
+            for (int r = 7; r <= sheet.getLastRowNum(); r++) {
+                Row row = sheet.getRow(r);
+                if (row == null) continue;
+
+                String docType = ExcelHelper.getCellValueAsString(row.getCell(0));
+                String saleNo = ExcelHelper.getCellValueAsString(row.getCell(1));
+                String dateStr = ExcelHelper.getCellValueAsString(row.getCell(2));
+                String custCode = ExcelHelper.getCellValueAsString(row.getCell(3));
+                String productCode = ExcelHelper.getCellValueAsString(row.getCell(7));
+
+                BigDecimal qty = ExcelHelper.getCellValueAsBigDecimal(row.getCell(10), BigDecimal.ZERO);
+                BigDecimal price = ExcelHelper.getCellValueAsBigDecimal(row.getCell(11), BigDecimal.ZERO);
+
+                if (saleNo.isEmpty() || productCode.isEmpty() || (!"銷貨".equals(docType) && !"銷退".equals(docType))) {
+                    continue;
+                }
+
+                Product product = productCodeMap.get(productCode.trim());
+                if (product == null) continue;
+
+                Customer customer = customerCodeMap.get(custCode.trim());
+                Long customerId = customer != null ? customer.getId() : null;
+
+                if ("銷退".equals(docType) && qty.compareTo(BigDecimal.ZERO) > 0) {
+                    qty = qty.negate();
+                }
+
+                CreateSaleOrderDTO orderDTO = orderMap.computeIfAbsent(saleNo, k -> {
+                    CreateSaleOrderDTO dto = new CreateSaleOrderDTO();
+                    dto.setCustomerId(customerId);
+                    dto.setSaleDate(parseMinguoDate(dateStr));
+                    dto.setRemark("舊ERP銷貨單 [" + k + "]");
+                    dto.setDeductStock(deductStock);
+                    dto.setDiscountAmount(BigDecimal.ZERO);
+                    dto.setItems(new ArrayList<>());
+                    return dto;
+                });
+
+                CreateSaleOrderDTO.CreateItemDTO itemDTO = new CreateSaleOrderDTO.CreateItemDTO();
+                itemDTO.setProductId(product.getId());
+                itemDTO.setQuantity(qty);
+                itemDTO.setUnitPrice(price);
+                orderDTO.getItems().add(itemDTO);
+            }
+
+            int count = 0;
+            for (CreateSaleOrderDTO dto : orderMap.values()) {
+                if (!dto.getItems().isEmpty()) {
+                    createSaleOrder(dto);
+                    count++;
+                }
+            }
+
+            return "成功匯入 " + count + " 筆舊銷貨單！";
+
+        } catch (Exception e) {
+            throw new RuntimeException("銷貨紀錄 Excel 匯入失敗：" + e.getMessage(), e);
+        }
+    }
+
+ // --- 匯出 Excel ---
+    @Override
+    public byte[] exportSaleOrdersToExcel() throws IOException {
+        List<SaleOrder> orders = saleOrderRepository.findAll();
+
+        try (Workbook workbook = new XSSFWorkbook(); 
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            
+            Sheet sheet = workbook.createSheet("銷貨紀錄");
+
+            CellStyle headerStyle = workbook.createCellStyle();
+            Font headerFont = workbook.createFont();
+            headerFont.setBold(true);
+            headerFont.setColor(IndexedColors.WHITE.getIndex());
+            headerStyle.setFont(headerFont);
+            headerStyle.setFillForegroundColor(IndexedColors.ROYAL_BLUE.getIndex()); 
+            headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+
+            Row headerRow = sheet.createRow(0);
+            String[] headers = {"銷貨單號", "銷貨日期", "客戶名稱", "折讓金額", "實收總金額", "備註"};
+            for (int i = 0; i < headers.length; i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(headers[i]);
+                cell.setCellStyle(headerStyle);
+            }
+
+            int rowNum = 1;
+            for (SaleOrder order : orders) {
+                Row row = sheet.createRow(rowNum++);
+                row.createCell(0).setCellValue(order.getSaleNo());
+                row.createCell(1).setCellValue(order.getSaleDate() != null ? order.getSaleDate().toString() : "");
+                row.createCell(2).setCellValue(order.getCustomer() != null ? order.getCustomer().getShortName() : "散客");
+                row.createCell(3).setCellValue(order.getDiscountAmount() != null ? order.getDiscountAmount().doubleValue() : 0.0);
+                row.createCell(4).setCellValue(order.getTotalAmount() != null ? order.getTotalAmount().doubleValue() : 0.0);
+                row.createCell(5).setCellValue(order.getRemark() != null ? order.getRemark() : "");
+            }
+
+            for (int i = 0; i < headers.length; i++) {
+                sheet.autoSizeColumn(i);
+            }
+
+            workbook.write(out);
+            return out.toByteArray();
+        }
+    }
+
+    private LocalDate parseMinguoDate(String minguoStr) {
+        if (minguoStr == null || !minguoStr.contains("/")) return LocalDate.now();
+        try {
+            String[] parts = minguoStr.split("/");
+            int year = Integer.parseInt(parts[0].trim()) + 1911;
+            int month = Integer.parseInt(parts[1].trim());
+            int day = Integer.parseInt(parts[2].trim());
+            return LocalDate.of(year, month, day);
+        } catch (Exception e) {
+            return LocalDate.now();
+        }
+    }
+
+    
 }

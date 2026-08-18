@@ -1,7 +1,10 @@
 package com.chijia.erp.service;
 
+import java.io.IOException;
 import java.time.LocalDate;
 import java.util.List;
+
+import org.springframework.web.multipart.MultipartFile;
 
 import com.chijia.erp.model.dto.CreatePurchaseOrderDTO;
 import com.chijia.erp.model.dto.PurchaseOrderDTO;
@@ -25,4 +28,10 @@ public interface PurchaseOrderService {
 
     // 6. 作廢/刪除進貨單 (自動將當時增加的庫存扣回)
     void deletePurchaseOrder(Long id);
+    
+    //7. 歷史進貨紀錄 Excel 匯入 (自動增加庫存)
+    String importPurchaseOrdersFromExcel(MultipartFile file);
+
+    // 8.進貨單據清單 Excel 報表匯出
+    byte[] exportPurchaseOrdersToExcel() throws IOException;
 }
